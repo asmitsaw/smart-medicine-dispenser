@@ -10,6 +10,7 @@
 #include <RTClib.h>
 #include <ESP32Servo.h>
 #include <TimeLib.h>
+#include <time.h>          // for NTP sync
 
 char ssid[] = "Asmit's F55";
 char pass[] = "12345678";
@@ -86,6 +87,47 @@ void showHome(DateTime now) {
   lcd.print("Waiting...     ");
 }
 
+// ── NTP -> RTC SYNC ───────────────────────────────────────
+// IST = UTC + 5h30m = 19800 seconds offset
+#define IST_OFFSET 19800
+
+void syncRTCfromNTP() {
+  Serial.println("[NTP] Syncing time from internet...");
+  lcdShow("Syncing time", "Please wait...");
+
+  configTime(IST_OFFSET, 0, "pool.ntp.org", "time.google.com");
+
+  struct tm t;
+  int retry = 0;
+  while (!getLocalTime(&t) && retry < 20) {
+    delay(500);
+    retry++;
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (retry < 20) {
+    // Write NTP time into RTC
+    rtc.adjust(DateTime(
+      t.tm_year + 1900,
+      t.tm_mon  + 1,
+      t.tm_mday,
+      t.tm_hour,
+      t.tm_min,
+      t.tm_sec
+    ));
+    char buf[32];
+    sprintf(buf, "RTC set %02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    Serial.println(buf);
+    lcdShow("Time synced!", buf + 8);  // show HH:MM:SS part
+    delay(1200);
+  } else {
+    Serial.println("[NTP] FAILED - using existing RTC time");
+    lcdShow("NTP failed", "Using RTC time");
+    delay(1500);
+  }
+}
+
 // ── BLYNK CALLBACKS ───────────────────────────────────────
 
 // Morning timer (hour+minute via V0/V6)
@@ -126,26 +168,23 @@ BLYNK_WRITE(V1) {
 // "1" = taken confirmed by cam, "0" = not detected
 BLYNK_WRITE(V9) {
   int result = param.asInt();
-  if (awaitingCamConfirm) {
+  if (awaitingCamConfirm) {        // only act if we're still waiting
     awaitingCamConfirm = false;
-    Blynk.virtualWrite(V2, 0);   // reset dispensed flag
+    Blynk.virtualWrite(V2, 0);     // tell detect.py to close camera
+    digitalWrite(buzzer, LOW);     // stop buzzer
 
     if (result == 1) {
       lcdShow("Medicine Taken", "Cam Confirmed");
       updateStatus("Medicine Taken");
       sendPushEvent("Medicine taken - camera confirmed!");
-      digitalWrite(buzzer, LOW);
-      delay(1500);
-      lcd.clear();
-      alertActive = false;
     } else {
       lcdShow("Missed Dose!", "Cam: Not Taken");
       updateStatus("Missed Dose");
       sendPushEvent("MISSED! Medicine not taken - check patient");
-      delay(1500);
-      lcd.clear();
-      alertActive = false;
     }
+    delay(1500);
+    lcd.clear();
+    alertActive = false;
   }
 }
 
@@ -175,8 +214,11 @@ void setup() {
 
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
+  // ── Sync RTC from NTP (WiFi is up after Blynk.begin) ────
+  syncRTCfromNTP();
+
   lcdShow("Smart Med Box", "Starting...");
-  delay(2000);
+  delay(1500);
   lcd.clear();
 
   // Reset camera flag on boot
@@ -223,40 +265,52 @@ void loop() {
   // ── ALERT MODE ──────────────────────────────────────────
   if (alertActive) {
 
-    // ── IR SENSOR CHECK (physical pickup) ──────────────────
-    // Both IR blocked = hand in dispenser = medicine picked up
-    if (digitalRead(ir1) == LOW && digitalRead(ir2) == LOW) {
-      // Physical pickup confirmed — let camera run for cam confirm
-      // Update LCD but keep cam window open
-      lcd.setCursor(0, 1);
-      lcd.print("IR: Picked up  ");
+    // 1️⃣ BUZZER — beeps for entire alert duration (non-blocking)
+    // Placed first so it runs every loop regardless of what resolves below
+    static unsigned long lastBeep = 0;
+    if (millis() - lastBeep > 400) {
+      digitalWrite(buzzer, !digitalRead(buzzer));
+      lastBeep = millis();
     }
 
-    // ── CAMERA TIMEOUT ─────────────────────────────────────
-    // If camera python never responded within CAM_TIMEOUT_MS,
-    // fall back to IR sensor result
-    if (awaitingCamConfirm && (millis() - dispensedAt > CAM_TIMEOUT_MS)) {
+    // 2️⃣ IR SENSORS — FIRST PRIORITY
+    // Both IR LOW = hand physically blocking dispenser = medicine picked up
+    if (digitalRead(ir1) == LOW && digitalRead(ir2) == LOW) {
+      digitalWrite(buzzer, LOW);         // stop buzzer immediately
+      Blynk.virtualWrite(V2, 0);         // signal detect.py to close camera
       awaitingCamConfirm = false;
-      Blynk.virtualWrite(V2, 0);
 
-      // IR-based fallback
-      if (digitalRead(ir1) == LOW && digitalRead(ir2) == LOW) {
-        lcdShow("Medicine Taken", "IR Confirmed");
-        updateStatus("Medicine Taken");
-        sendPushEvent("Medicine taken - IR confirmed");
-      } else {
-        lcdShow("Missed Dose!", "No Detection");
-        updateStatus("Missed Dose");
-        sendPushEvent("MISSED! Medicine not taken - check patient");
-      }
-      digitalWrite(buzzer, LOW);
+      lcdShow("Medicine Taken", "IR Confirmed");
+      updateStatus("Medicine Taken");
+      sendPushEvent("Medicine taken - IR confirmed!");
       delay(1500);
       lcd.clear();
       alertActive = false;
     }
 
-    // ── OVERALL ALERT TIMEOUT (30 s) ───────────────────────
+    // 3️⃣ CAMERA TIMEOUT — detect.py didn't respond, fall back to IR snapshot
+    else if (awaitingCamConfirm && (millis() - dispensedAt > CAM_TIMEOUT_MS)) {
+      awaitingCamConfirm = false;
+      Blynk.virtualWrite(V2, 0);
+      digitalWrite(buzzer, LOW);
+
+      if (digitalRead(ir1) == LOW && digitalRead(ir2) == LOW) {
+        lcdShow("Medicine Taken", "IR Fallback");
+        updateStatus("Medicine Taken");
+        sendPushEvent("Medicine taken - IR confirmed");
+      } else {
+        lcdShow("Missed Dose!", "Timeout");
+        updateStatus("Missed Dose");
+        sendPushEvent("MISSED! Medicine not taken - check patient");
+      }
+      delay(1500);
+      lcd.clear();
+      alertActive = false;
+    }
+
+    // 4️⃣ OVERALL 30s TIMEOUT — everything else timed out
     else if (!awaitingCamConfirm && (millis() - alertStart > ALERT_TIMEOUT_MS)) {
+      digitalWrite(buzzer, LOW);
       lcdShow("Missed Dose!");
       updateStatus("Missed Dose");
       sendPushEvent("MISSED! Medicine not taken");
@@ -265,14 +319,10 @@ void loop() {
       alertActive = false;
     }
 
-    // ── BUZZER (non-blocking) ─────────────────────────────
-    else if (!awaitingCamConfirm == false) {
-      // still alert, keep buzzing
-      static unsigned long lastBeep = 0;
-      if (millis() - lastBeep > 400) {
-        digitalWrite(buzzer, !digitalRead(buzzer));
-        lastBeep = millis();
-      }
+    // 5️⃣ Show camera status on LCD row 2 while waiting
+    else if (awaitingCamConfirm) {
+      lcd.setCursor(0, 1);
+      lcd.print("Cam watching... ");
     }
   }
 

@@ -87,10 +87,25 @@ def run_camera_detection():
     detected   = False
     last_detect= 0
     confirm_count = 0      # need N consecutive detections for robustness
+    abort      = False     # set True if ESP32 resets V2 (IR confirmed first)
+
+    # --- Background thread: watch V2 for early-exit signal ---
+    def watch_v2():
+        nonlocal abort
+        while not abort and (time.time() - start) < CAM_WINDOW_SEC:
+            v = blynk_get(V_DISPENSED)
+            if v == "0":
+                print("[CAM] V2 reset by ESP32 (IR confirmed) — closing camera early")
+                abort = True
+                break
+            time.sleep(2)
+    import threading
+    watcher = threading.Thread(target=watch_v2, daemon=True)
+    watcher.start()
 
     while True:
         elapsed = time.time() - start
-        if elapsed > CAM_WINDOW_SEC:
+        if elapsed > CAM_WINDOW_SEC or abort:
             break
 
         ret, frame = cap.read()
