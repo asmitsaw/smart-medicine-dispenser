@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Medicine Dashboard</title>
+<link rel="manifest" href="manifest.json">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0f172a, #020617);
+      color: white;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+      transition: 0.3s;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+    }
+
+    h2 {
+      margin-bottom: 10px;
+      font-size: 18px;
+      color: #94a3b8;
+    }
+
+    .status {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+
+    .online {
+      background: #16a34a;
+    }
+
+    .offline {
+      background: red;
+    }
+
+    @media(max-width: 500px) {
+      h1 {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>💊 Smart Medicine System</h1>
+
+<div class="grid">
+
+  <!-- STATUS -->
+  <div class="card">
+    <h2>Status</h2>
+    <div id="status" class="status">Loading...</div>
+    <div id="connection" class="badge online">Online</div>
+  </div>
+
+  <!-- CLOCK -->
+  <div class="card">
+    <h2>Current Time</h2>
+    <div id="clock" class="status"></div>
+  </div>
+
+  <!-- CONTROL -->
+  <div class="card">
+    <h2>Manual Control</h2>
+    <button onclick="dispense(event)">Dispense Medicine</button>
+  </div>
+
+  <!-- TIMER -->
+  <div class="card">
+    <h2>Set Medicine Time</h2>
+    <input type="time" id="timeInput">
+    <button onclick="setTime()">Set Time</button>
+  </div>
+
+</div>
+
+<script>
+  const token = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU";
+
+  // CLOCK
+  setInterval(() => {
+    let now = new Date();
+    document.getElementById("clock").innerText =
+      now.toLocaleTimeString();
+  }, 1000);
+
+  // DISPENSE
+  function dispense(event) {
+    let btn = event.target;
+    btn.disabled = true;
+    btn.innerText = "Processing...";
+
+    fetch(`https://blynk.cloud/external/api/update?token=${token}&V1=1`)
+      .then(() => {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerText = "Dispense Medicine";
+        }, 3000);
+      });
+  }
+
+  // SET TIME
+  function setTime() {
+    let t = document.getElementById("timeInput").value;
+
+    if (!t) {
+      alert("Select time first");
+      return;
+    }
+
+    let [h, m] = t.split(":");
+    let seconds = (h * 3600) + (m * 60);
+
+    fetch(`https://blynk.cloud/external/api/update?token=${token}&V0=${seconds}`)
+      .then(() => alert("Time Updated"));
+  }
+
+  // STATUS
+  function getStatus() {
+    fetch(`https://blynk.cloud/external/api/get?token=${token}&V3`)
+      .then(res => res.text())
+      .then(data => {
+        let el = document.getElementById("status");
+        el.innerText = data;
+
+        if (data.includes("Waiting")) el.style.color = "#38bdf8";
+        else if (data.includes("Take")) el.style.color = "#f59e0b";
+        else if (data.includes("Taken")) el.style.color = "#22c55e";
+        else if (data.includes("Missed")) el.style.color = "#ef4444";
+      })
+      .catch(() => {
+        document.getElementById("connection").innerText = "Offline";
+        document.getElementById("connection").className = "badge offline";
+      });
+  }
+
+  getStatus();
+  setInterval(getStatus, 2000);
+</script>
+
+</body>
+</html>
