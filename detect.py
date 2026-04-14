@@ -1,8 +1,14 @@
+import sys
+import io
 import cv2
 import mediapipe as mp
 import requests
 import time
 import math
+
+# Fix Windows console encoding for emoji / special chars
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # 🔥 YOUR BLYNK TOKEN
 BLYNK_TOKEN = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU"
@@ -20,7 +26,7 @@ last_sent_time = 0
 cooldown = 5   # seconds
 
 def send_taken():
-    print("✅ Medicine Taken detected!")
+    print("[TAKEN] Medicine Taken detected!")
 
     # Send to Blynk
     requests.get(f"https://blynk.cloud/external/api/update?token={BLYNK_TOKEN}&V3=Medicine%20Taken")
