@@ -12,77 +12,73 @@
 #include <ESP32Servo.h>
 #include <TimeLib.h>
 
-// WiFi
 char ssid[] = "WHITE_DEVIL";
 char pass[] = "sunita@1974";
 
-// LCD + RTC
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 RTC_DS1307 rtc;
-
-// Servo
 Servo myServo;
 
-// Pins
 #define buzzer 27
 #define ir1 34
 #define ir2 35
 
-// Medicine time
 int medHour = 10;
 int medMinute = 4;
 
 bool alreadyTriggered = false;
-
-// 🔥 STATUS CONTROL
 String lastStatus = "";
 
-void updateStatus(String newStatus) {
-  if (newStatus != lastStatus) {
-    Blynk.virtualWrite(V3, newStatus);
-    lastStatus = newStatus;
-    Serial.println("Status: " + newStatus);
+// 🔥 STATUS
+void updateStatus(String s) {
+  if (s != lastStatus) {
+    Blynk.virtualWrite(V3, s);
+    Serial.println("Status: " + s);
+    lastStatus = s;
   }
 }
 
-// 📱 TIME FROM APP
+// 🔥 LCD HOME
+void showHome(DateTime now) {
+  char t[9];
+  sprintf(t, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+
+  lcd.setCursor(0, 0);
+  lcd.print("Time:");
+  lcd.print(t);
+  lcd.print("   ");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Waiting...     ");
+}
+
+// 🔥 SERVO
+void dispenseMedicine() {
+  myServo.write(90);
+  delay(2000);
+  myServo.write(0);
+}
+
+// 📱 TIME
 BLYNK_WRITE(V0) {
   long t = param.asLong();
-
   medHour = hour(t);
   medMinute = minute(t);
-
-  Serial.print("Time set: ");
-  Serial.print(medHour);
-  Serial.print(":");
-  Serial.println(medMinute);
 }
 
-// 📱 MANUAL DISPENSE
+// 📱 BUTTON
 BLYNK_WRITE(V1) {
-  if (param.asInt() == 1) {
-    dispenseMedicine();
-  }
+  if (param.asInt()) dispenseMedicine();
 }
 
-// 🔧 SERVO FUNCTION
-void dispenseMedicine() {
-  myServo.write(90);   // open
-  delay(2000);
-
-  myServo.write(0);    // close (reset)
-  delay(500);
-}
 void setup() {
   Serial.begin(115200);
 
   Wire.begin(21, 22);
-
   lcd.init();
   lcd.backlight();
 
   rtc.begin();
-
   myServo.attach(13);
 
   pinMode(buzzer, OUTPUT);
@@ -91,10 +87,7 @@ void setup() {
 
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
-  lcd.setCursor(0, 0);
   lcd.print("Smart Med Box");
-  lcd.setCursor(0, 1);
-  lcd.print("System Ready");
   delay(2000);
   lcd.clear();
 
@@ -105,17 +98,7 @@ void loop() {
   Blynk.run();
 
   DateTime now = rtc.now();
-
-  char timeStr[9];
-  sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
-
-  lcd.setCursor(0, 0);
-  lcd.print("Time: ");
-  lcd.print(timeStr);
-  lcd.print("   ");
-
-  lcd.setCursor(0, 1);
-  lcd.print("Waiting...     ");
+  showHome(now);
 
   updateStatus("Waiting...");
 
@@ -124,63 +107,43 @@ void loop() {
     alreadyTriggered = true;
 
     lcd.clear();
-    lcd.setCursor(0, 0);
     lcd.print("Take Medicine!");
-
     updateStatus("Take Medicine!");
 
     dispenseMedicine();
 
-    unsigned long startTime = millis();
+    unsigned long start = millis();
 
-    while (millis() - startTime < 30000) {
+    while (millis() - start < 30000) {
+      Blynk.run();
 
-      int s1 = digitalRead(ir1);
-      int s2 = digitalRead(ir2);
+      if (digitalRead(ir1) == 0 && digitalRead(ir2) == 0) {
 
-      if (s1 == 0 && s2 == 0) {
-        delay(200);
+        digitalWrite(buzzer, LOW);
 
-        if (digitalRead(ir1) == 0 && digitalRead(ir2) == 0) {
+        lcd.clear();
+        lcd.print("Medicine Taken");
+        updateStatus("Medicine Taken");
 
-          digitalWrite(buzzer, LOW);
-
-          lcd.clear();
-          lcd.setCursor(0, 0);
-          lcd.print("Medicine Taken");
-
-          updateStatus("Medicine Taken");
-
-          delay(3000);
-          lcd.clear();
-          break;
-        }
+        delay(2000);
+        break;
       }
 
       digitalWrite(buzzer, HIGH);
       delay(200);
       digitalWrite(buzzer, LOW);
       delay(200);
-
-      lcd.setCursor(0, 1);
-      lcd.print("Please Take Med");
     }
 
-    if (millis() - startTime >= 30000) {
+    if (millis() - start >= 30000) {
       lcd.clear();
-      lcd.setCursor(0, 0);
       lcd.print("Missed Dose!");
-
       updateStatus("Missed Dose");
-
-      delay(3000);
-      lcd.clear();
+      delay(2000);
     }
   }
 
-  if (now.minute() != medMinute) {
-    alreadyTriggered = false;
-  }
+  if (now.minute() != medMinute) alreadyTriggered = false;
 
-  delay(1000);
+  delay(500);
 }

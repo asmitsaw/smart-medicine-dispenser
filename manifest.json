@@ -1,13 +1,13 @@
 {
-  "name": "Smart Medicine",
-  "short_name": "Medicine",
-  "start_url": ".",
+  "name": "Smart Medicine System",
+  "short_name": "MedBox",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#020617",
   "theme_color": "#22c55e",
   "icons": [
     {
-      "src": "icon.png",
+      "src": "image.png",
       "sizes": "192x192",
       "type": "image/png"
     }
