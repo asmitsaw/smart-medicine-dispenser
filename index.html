@@ -8,89 +8,81 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-*{
-  margin:0;
-  padding:0;
-  box-sizing:border-box;
-  font-family: Arial, sans-serif;
-}
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system, BlinkMacSystemFont, sans-serif;}
 
 body{
-  background:#fefefe;
-  color:#000;
+  background:linear-gradient(135deg,#0f172a,#020617);
+  color:white;
   padding:20px;
 }
 
-/* TITLE */
+/* HEADER */
 h1{
   text-align:center;
-  font-size:26px;
   margin-bottom:20px;
+  font-size:26px;
 }
 
 /* GRID */
 .grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
   gap:20px;
 }
 
-/* CARD (NEO BRUTAL STYLE) */
+/* GLASS + BRUTAL CARD */
 .card{
-  background:#fff;
-  border:3px solid black;
+  backdrop-filter:blur(14px);
+  background:rgba(255,255,255,0.05);
+  border:2px solid white;
+  border-radius:18px;
   padding:20px;
-  box-shadow:6px 6px 0px black;
-  transition:0.2s;
+  box-shadow:6px 6px 0px #000;
+  transition:0.25s;
 }
 
 .card:hover{
-  transform:translate(-3px,-3px);
-  box-shadow:9px 9px 0px black;
-}
-
-h2{
-  margin-bottom:10px;
-  font-size:18px;
+  transform:translateY(-5px);
 }
 
 /* STATUS */
-#status{
+.status{
   font-size:22px;
   font-weight:bold;
 }
 
 .badge{
   margin-top:8px;
+  padding:6px 10px;
+  border-radius:20px;
+  font-size:12px;
   display:inline-block;
-  padding:5px 10px;
-  border:2px solid black;
 }
 
-.online{ background:#22c55e; }
-.offline{ background:#ef4444; }
+.online{background:#22c55e;}
+.offline{background:#ef4444;}
 
 /* BUTTON */
 button{
   width:100%;
   padding:12px;
-  border:3px solid black;
-  background:#facc15;
-  font-weight:bold;
+  border:none;
+  border-radius:12px;
+  background:linear-gradient(135deg,#22c55e,#16a34a);
+  color:white;
+  font-size:16px;
   cursor:pointer;
-  box-shadow:4px 4px 0 black;
+  transition:0.2s;
 }
 
-button:active{
-  transform:translate(2px,2px);
-  box-shadow:none;
-}
+button:active{transform:scale(0.95);}
 
 /* INPUT */
 input{
   width:100%;
   padding:12px;
-  border:3px solid black;
+  border-radius:10px;
+  border:none;
   margin-top:10px;
 }
 
@@ -100,13 +92,16 @@ input{
   bottom:20px;
   right:20px;
   padding:15px;
-  border:3px solid black;
-  background:#000;
-  color:#fff;
+  border-radius:12px;
+  background:black;
   display:none;
-  box-shadow:5px 5px 0 black;
+  animation:fade 0.3s ease;
 }
 
+@keyframes fade{
+  from{opacity:0; transform:translateY(10px);}
+  to{opacity:1;}
+}
 </style>
 </head>
 
@@ -118,28 +113,28 @@ input{
 
 <div class="card">
 <h2>Status</h2>
-<div id="status">Loading...</div>
+<div id="status" class="status">Loading...</div>
 <div id="connection" class="badge online">Online</div>
 </div>
 
 <div class="card">
-<h2>Current Time</h2>
-<div id="clock"></div>
+<h2>Time</h2>
+<div id="clock" class="status"></div>
 </div>
 
 <div class="card">
-<h2>Manual Control</h2>
-<button onclick="dispense(event)">Dispense Medicine</button>
+<h2>Manual</h2>
+<button onclick="dispense()">Dispense</button>
 </div>
 
 <div class="card">
-<h2>Set Medicine Time</h2>
+<h2>Set Time</h2>
 <input type="time" id="timeInput">
-<button onclick="setTime()">Set Time</button>
+<button onclick="setTime()">Set</button>
 </div>
 
 <div class="card">
-<h2>Medicine History</h2>
+<h2>Medicine Stats</h2>
 <canvas id="chart"></canvas>
 </div>
 
@@ -152,53 +147,46 @@ const token = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU";
 
 // CLOCK
 setInterval(()=>{
- document.getElementById("clock").innerText =
- new Date().toLocaleTimeString();
+ clock.innerText=new Date().toLocaleTimeString();
 },1000);
 
 // DISPENSE
-function dispense(e){
- let btn=e.target;
- btn.disabled=true;
- btn.innerText="Processing...";
-
- fetch(`https://blynk.cloud/external/api/update?token=${token}&V1=1`)
- .then(()=>{
-  setTimeout(()=>{
-    btn.disabled=false;
-    btn.innerText="Dispense Medicine";
-  },3000);
- });
+function dispense(){
+ fetch(`https://blynk.cloud/external/api/update?token=${token}&V1=1`);
+ speak("Dispensing medicine");
 }
 
 // SET TIME
 function setTime(){
- let t=document.getElementById("timeInput").value;
+ let t=timeInput.value;
  if(!t) return alert("Select time");
 
  let [h,m]=t.split(":");
- let sec=h*3600 + m*60;
+ fetch(`https://blynk.cloud/external/api/update?token=${token}&V0=${h*3600+m*60}`);
 
- fetch(`https://blynk.cloud/external/api/update?token=${token}&V0=${sec}`)
- .then(()=>alert("Time Updated"));
+ showPopup("Time Updated");
+}
+
+// 🔔 VOICE ALERT
+function speak(text){
+ let speech=new SpeechSynthesisUtterance(text);
+ speech.lang="en-US";
+ speech.rate=1;
+ window.speechSynthesis.speak(speech);
 }
 
 // POPUP
 function showPopup(msg){
- let p=document.getElementById("popup");
- let t=document.getElementById("popupText");
-
- t.innerText=msg;
- p.style.display="block";
-
- setTimeout(()=>p.style.display="none",3000);
+ popupText.innerText=msg;
+ popup.style.display="block";
+ setTimeout(()=>popup.style.display="none",3000);
 }
 
 // CHART
-let taken=parseInt(localStorage.getItem("taken")) || 0;
-let missed=parseInt(localStorage.getItem("missed")) || 0;
+let taken=parseInt(localStorage.getItem("taken"))||0;
+let missed=parseInt(localStorage.getItem("missed"))||0;
 
-let chart=new Chart(document.getElementById("chart"),{
+let chart=new Chart(chart,{
  type:'doughnut',
  data:{
   labels:['Taken','Missed'],
@@ -209,51 +197,55 @@ let chart=new Chart(document.getElementById("chart"),{
  }
 });
 
-// STATUS
+// STATUS + CLOUD LOG SIMULATION
 let last="";
 function getStatus(){
  fetch(`https://blynk.cloud/external/api/get?token=${token}&V3`)
  .then(r=>r.text())
  .then(d=>{
+  status.innerText=d;
 
-  document.getElementById("status").innerText=d;
+  if(d!=last){
 
-  if(d!==last){
+    if(d.includes("Take")){
+      showPopup("⏰ Time to take medicine");
+      speak("Time to take medicine");
+    }
 
-   if(d.includes("Take")){
-     showPopup("⏰ Time to take medicine!");
-   }
+    if(d.includes("Taken")){
+      taken++;
+      localStorage.setItem("taken",taken);
+      showPopup("Medicine Taken");
+    }
 
-   if(d.includes("Taken")){
-     taken++;
-     localStorage.setItem("taken",taken);
-     showPopup("✅ Medicine Taken");
-   }
+    if(d.includes("Missed")){
+      missed++;
+      localStorage.setItem("missed",missed);
+      showPopup("Missed Dose");
+    }
 
-   if(d.includes("Missed")){
-     missed++;
-     localStorage.setItem("missed",missed);
-     showPopup("❌ Missed Dose");
-   }
+    chart.data.datasets[0].data=[taken,missed];
+    chart.update();
 
-   chart.data.datasets[0].data=[taken,missed];
-   chart.update();
-
-   last=d;
+    last=d;
   }
-
  })
  .catch(()=>{
-  document.getElementById("connection").innerText="Offline";
-  document.getElementById("connection").className="badge offline";
+  connection.innerText="Offline";
+  connection.className="badge offline";
  });
 }
 
 getStatus();
 setInterval(getStatus,2000);
 
+// PUSH NOTIFICATION
+if("Notification" in window){
+ Notification.requestPermission();
+}
+
 // PWA
-if ('serviceWorker' in navigator) {
+if('serviceWorker' in navigator){
  navigator.serviceWorker.register('sw.js');
 }
 </script>
