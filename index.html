@@ -312,6 +312,36 @@
       opacity: 0.35;
       border-top: 2px solid var(--black);
     }
+
+    /* ─── PUSH BELL ───────────────────────────────────────── */
+    #notif-btn {
+      background: var(--yellow);
+      border: var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 7px 14px;
+      font-family: var(--font);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    #notif-btn:active { transform: translate(3px,3px); box-shadow: none; }
+    #notif-btn.granted { background: var(--green); }
+    #notif-btn.denied  { background: var(--red); color: #fff; cursor: not-allowed; }
+
+    /* ─── CAM STATUS CARD ─────────────────────────────────── */
+    .cam-idle    { background: var(--white); }
+    .cam-active  { background: #fff7c0; animation: pulse-border 1s infinite; }
+    .cam-taken   { background: #d1fae5; }
+    .cam-missed  { background: #fee2e2; }
+
+    @keyframes pulse-border {
+      0%,100% { box-shadow: var(--shadow); }
+      50%      { box-shadow: 8px 8px 0 var(--yellow); }
+    }
   </style>
 </head>
 <body>
@@ -319,13 +349,16 @@
 <!-- ── HEADER ──────────────────────────────────────────────── -->
 <header>
   <h1>💊 Smart Medicine Dispenser</h1>
-  <div id="header-clock">--:--:--</div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button id="notif-btn" onclick="requestPush()" title="Enable push notifications">🔔 Notify</button>
+    <div id="header-clock">--:--:--</div>
+  </div>
 </header>
 
 <!-- ── MAIN ─────────────────────────────────────────────────── -->
 <main>
 
-  <!-- ROW 1: Status + Manual Control -->
+  <!-- ROW 1: Status + Manual Control + Camera State -->
   <div class="grid-2">
 
     <!-- STATUS CARD -->
@@ -348,6 +381,16 @@
       </button>
     </div>
 
+  </div>
+
+  <!-- CAM + IR STATE ROW -->
+  <div id="cam-card" class="card card-accent-cyan cam-idle" style="display:flex;align-items:center;gap:18px;">
+    <div style="font-size:2rem;" id="cam-icon">📷</div>
+    <div>
+      <p class="section-label">AI Camera · IR Sensors</p>
+      <div id="cam-label" style="font-size:1rem;font-weight:700;">Idle — waiting for dispense</div>
+      <div id="ir-label" style="font-size:0.78rem;opacity:0.55;margin-top:4px;font-weight:600;">IR1 · IR2: —</div>
+    </div>
   </div>
 
   <!-- ROW 2: Timer Cards -->
@@ -412,16 +455,22 @@
 <!-- ── SCRIPT ─────────────────────────────────────────────────── -->
 <script>
   const TOKEN = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU";
+  const BLYNK = "https://blynk.cloud/external/api";
 
-  // ── DOM refs
-  const clockEl      = document.getElementById("header-clock");
-  const statusEl     = document.getElementById("status");
-  const connectionEl = document.getElementById("connection");
-  const takenCountEl = document.getElementById("taken-count");
-  const missedCountEl= document.getElementById("missed-count");
-  const toast        = document.getElementById("toast");
+  // ── DOM refs ────────────────────────────────────────────
+  const clockEl       = document.getElementById("header-clock");
+  const statusEl      = document.getElementById("status");
+  const connectionEl  = document.getElementById("connection");
+  const takenCountEl  = document.getElementById("taken-count");
+  const missedCountEl = document.getElementById("missed-count");
+  const toast         = document.getElementById("toast");
+  const camCard       = document.getElementById("cam-card");
+  const camLabel      = document.getElementById("cam-label");
+  const camIcon       = document.getElementById("cam-icon");
+  const irLabel       = document.getElementById("ir-label");
+  const notifBtn      = document.getElementById("notif-btn");
 
-  // ── Live Clock
+  // ── Live Clock ──────────────────────────────────────────
   function updateClock() {
     clockEl.textContent = new Date().toLocaleTimeString("en-IN", {
       hour: "2-digit", minute: "2-digit", second: "2-digit"
@@ -430,46 +479,41 @@
   updateClock();
   setInterval(updateClock, 1000);
 
-  // ── Dispense
+  // ── Dispense ────────────────────────────────────────────
   function dispense() {
-    fetch(`https://blynk.cloud/external/api/update?token=${TOKEN}&V1=1`);
+    fetch(`${BLYNK}/update?token=${TOKEN}&V1=1`);
     showToast("⚡ Dispensing medicine now…");
   }
 
-  // ── Set Timer (type: 0=morning, 1=afternoon, 2=night)
+  // ── Set Timer ───────────────────────────────────────────
   function setTime(type) {
-    const ids  = ["morning", "afternoon", "night"];
-    const names = ["Morning", "Afternoon", "Night"];
+    const ids   = ["morning", "afternoon", "night"];
+    const names = ["Morning",  "Afternoon",  "Night"];
     const t = document.getElementById(ids[type]).value;
     if (!t) { showToast("⚠️ Please select a time first"); return; }
-
     const [h, m] = t.split(":");
     const urls = [
-      `https://blynk.cloud/external/api/update?token=${TOKEN}&V0=${h}&V6=${m}`,
-      `https://blynk.cloud/external/api/update?token=${TOKEN}&V4=${h}&V7=${m}`,
-      `https://blynk.cloud/external/api/update?token=${TOKEN}&V5=${h}&V8=${m}`,
+      `${BLYNK}/update?token=${TOKEN}&V0=${h}&V6=${m}`,
+      `${BLYNK}/update?token=${TOKEN}&V4=${h}&V7=${m}`,
+      `${BLYNK}/update?token=${TOKEN}&V5=${h}&V8=${m}`,
     ];
-
-    fetch(urls[type]).then(() => {
-      showToast(`✅ ${names[type]} time set to ${t}`);
-    }).catch(() => {
-      showToast("❌ Failed to update. Check connection.");
-    });
+    fetch(urls[type])
+      .then(()  => showToast(`✅ ${names[type]} time set to ${t}`))
+      .catch(()  => showToast("❌ Failed. Check connection."));
   }
 
-  // ── Toast
+  // ── Toast ───────────────────────────────────────────────
   let toastTimer;
   function showToast(msg) {
     toast.textContent = msg;
     toast.style.display = "block";
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toast.style.display = "none"; }, 3200);
+    toastTimer = setTimeout(() => { toast.style.display = "none"; }, 3400);
   }
 
-  // ── Stats
+  // ── Stats chart ─────────────────────────────────────────
   let taken  = Number(localStorage.getItem("taken")  || 0);
   let missed = Number(localStorage.getItem("missed") || 0);
-
   takenCountEl.textContent  = taken;
   missedCountEl.textContent = missed;
 
@@ -480,63 +524,178 @@
       datasets: [{
         data: [taken, missed],
         backgroundColor: ["#06d6a0", "#ef233c"],
-        borderColor: ["#0d0d0d", "#0d0d0d"],
+        borderColor:     ["#0d0d0d", "#0d0d0d"],
         borderWidth: 3,
       }]
     },
     options: {
       plugins: {
-        legend: {
-          labels: {
-            font: { family: "'Space Grotesk'", weight: "700", size: 13 },
-            color: "#0d0d0d",
-          }
-        }
+        legend: { labels: {
+          font: { family: "'Space Grotesk'", weight: "700", size: 13 },
+          color: "#0d0d0d"
+        }}
       },
       cutout: "60%",
     }
   });
 
-  // ── Device Status Polling
+  // ── Camera card state ───────────────────────────────────
+  function setCamState(state, label, icon) {
+    camCard.className = `card card-accent-cyan cam-${state}`;
+    camLabel.textContent = label;
+    camIcon.textContent  = icon;
+  }
+
+  // ── Device Status Polling (V3) ──────────────────────────
   let lastStatus = "";
   function getStatus() {
-    fetch(`https://blynk.cloud/external/api/get?token=${TOKEN}&V3`)
+    fetch(`${BLYNK}/get?token=${TOKEN}&V3`)
       .then(r => r.text())
       .then(d => {
+        // strip quotes Blynk sometimes adds
+        d = d.replace(/^"|"$/g, "").trim();
         statusEl.textContent = d;
-
         connectionEl.textContent = "● Online";
-        connectionEl.className = "badge badge-online";
+        connectionEl.className   = "badge badge-online";
 
         if (d !== lastStatus) {
-          if (d.includes("Take"))  { showToast("⏰ Time to take your medicine!"); }
-          if (d.includes("Taken")) {
+          // ── push a native notification based on status ──
+          if (d.includes("Take Medicine")) {
+            showToast("⏰ Time to take your medicine!");
+            nativeNotify("💊 Time!", "Take your medicine now!");
+          }
+          if (d.includes("Manual Dispense")) {
+            setCamState("active", "Camera detecting… (manual)", "🎥");
+          }
+          if (d.includes("Medicine Taken")) {
             taken++;
             localStorage.setItem("taken", taken);
             takenCountEl.textContent = taken;
+            setCamState("taken", "Medicine Taken ✔", "✅");
+            chart.data.datasets[0].data = [taken, missed];
+            chart.update();
+            nativeNotify("✅ Taken", "Medicine confirmed taken by camera");
           }
           if (d.includes("Missed")) {
             missed++;
             localStorage.setItem("missed", missed);
             missedCountEl.textContent = missed;
+            setCamState("missed", "Missed Dose ✗", "❌");
+            chart.data.datasets[0].data = [taken, missed];
+            chart.update();
+            nativeNotify("❌ Missed!", "Patient did not take medicine");
           }
-          chart.data.datasets[0].data = [taken, missed];
-          chart.update();
+          if (d.includes("Dispensed") || d.includes("Take Medicine")) {
+            setCamState("active", "Medicine dispensed — camera watching…", "🎥");
+          }
           lastStatus = d;
         }
       })
       .catch(() => {
         connectionEl.textContent = "● Offline";
-        connectionEl.className = "badge badge-offline";
+        connectionEl.className   = "badge badge-offline";
       });
   }
-
   getStatus();
   setInterval(getStatus, 2000);
 
-  // ── Service Worker
+  // ── V2 Dispensed state polling ──────────────────────────
+  let lastV2 = "0";
+  function pollDispensed() {
+    fetch(`${BLYNK}/get?token=${TOKEN}&V2`)
+      .then(r => r.text())
+      .then(v => {
+        v = v.replace(/^"|"$/g, "").trim();
+        if (v === "1" && lastV2 !== "1") {
+          setCamState("active", "Medicine dispensed — camera detecting…", "🎥");
+          showToast("📷 Camera is watching for medicine intake…");
+        }
+        if (v === "0" && lastV2 === "1") {
+          // camera finished — status card will update via V3 poll
+          setTimeout(() => setCamState("idle", "Idle — waiting for next dispense", "📷"), 3000);
+        }
+        lastV2 = v;
+      }).catch(() => {});
+  }
+  pollDispensed();
+  setInterval(pollDispensed, 2500);
+
+  // ── V10 Push message polling ────────────────────────────
+  // ESP32 / detect.py writes human-readable alerts here
+  let lastPush = "";
+  function pollPush() {
+    fetch(`${BLYNK}/get?token=${TOKEN}&V10`)
+      .then(r => r.text())
+      .then(msg => {
+        msg = msg.replace(/^"|"$/g, "").trim();
+        if (msg && msg !== lastPush && msg.length > 1) {
+          nativeNotify("💊 Smart Medicine", msg);
+          lastPush = msg;
+        }
+      }).catch(() => {});
+  }
+  pollPush();
+  setInterval(pollPush, 3000);
+
+  // ══════════════════════════════════════════════════════
+  // PUSH NOTIFICATIONS (Web Notifications API)
+  // ══════════════════════════════════════════════════════
+
+  // Update bell button UI
+  function updateNotifBtn() {
+    const p = Notification.permission;
+    if (p === "granted") {
+      notifBtn.textContent = "🔔 Alerts ON";
+      notifBtn.className = "granted";
+    } else if (p === "denied") {
+      notifBtn.textContent = "🔕 Blocked";
+      notifBtn.className = "denied";
+    } else {
+      notifBtn.textContent = "🔔 Enable Alerts";
+      notifBtn.className = "";
+    }
+  }
+
+  // Request notification permission
+  async function requestPush() {
+    if (!("Notification" in window)) {
+      showToast("⚠️ Your browser does not support notifications");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      showToast("🔕 Notifications blocked — enable in browser settings");
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    updateNotifBtn();
+    if (perm === "granted") {
+      showToast("🔔 Notifications enabled!");
+      nativeNotify("💊 Smart Medicine", "Push alerts are now active!");
+    }
+  }
+
+  // Show a native browser notification
+  function nativeNotify(title, body) {
+    if (Notification.permission !== "granted") return;
+    const n = new Notification(title, {
+      body,
+      icon: "https://cdn-icons-png.flaticon.com/512/3448/3448609.png",
+      badge:"https://cdn-icons-png.flaticon.com/512/3448/3448609.png",
+      tag: "med-alert",
+      renotify: true,
+    });
+    n.onclick = () => window.focus();
+  }
+
+  // Init button state on load
+  if ("Notification" in window) updateNotifBtn();
+  else { notifBtn.style.display = "none"; }
+
+  // ── Service Worker ──────────────────────────────────────
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js");
+    navigator.serviceWorker.register("./sw.js")
+      .then(reg => console.log("SW registered:", reg.scope))
+      .catch(err => console.warn("SW error:", err));
   }
 </script>
 
