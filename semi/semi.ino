@@ -128,28 +128,19 @@ void syncRTCfromNTP() {
   }
 }
 
-// ── BLYNK CALLBACKS ───────────────────────────────────────
+// ── TIMER CALLBACKS ───────────────────────────────────────
+// Web app sends: V0=hour, V6=minute (morning)
+//                V4=hour, V7=minute (afternoon)
+//                V5=hour, V8=minute (night)
 
-// Morning timer (hour+minute via V0/V6)
-BLYNK_WRITE(V0) {
-  long t = param.asLong();
-  medHour[0]   = hour(t);
-  medMinute[0] = minute(t);
-}
+BLYNK_WRITE(V0) { medHour[0]   = param.asInt(); Serial.printf("[TIMER] Morning   hour   = %d\n", medHour[0]); }
+BLYNK_WRITE(V6) { medMinute[0] = param.asInt(); Serial.printf("[TIMER] Morning   minute = %d\n", medMinute[0]); }
 
-// Afternoon timer (V4/V7)
-BLYNK_WRITE(V4) {
-  long t = param.asLong();
-  medHour[1]   = hour(t);
-  medMinute[1] = minute(t);
-}
+BLYNK_WRITE(V4) { medHour[1]   = param.asInt(); Serial.printf("[TIMER] Afternoon hour   = %d\n", medHour[1]); }
+BLYNK_WRITE(V7) { medMinute[1] = param.asInt(); Serial.printf("[TIMER] Afternoon minute = %d\n", medMinute[1]); }
 
-// Night timer (V5/V8)
-BLYNK_WRITE(V5) {
-  long t = param.asLong();
-  medHour[2]   = hour(t);
-  medMinute[2] = minute(t);
-}
+BLYNK_WRITE(V5) { medHour[2]   = param.asInt(); Serial.printf("[TIMER] Night     hour   = %d\n", medHour[2]); }
+BLYNK_WRITE(V8) { medMinute[2] = param.asInt(); Serial.printf("[TIMER] Night     minute = %d\n", medMinute[2]); }
 
 // Manual dispense
 BLYNK_WRITE(V1) {

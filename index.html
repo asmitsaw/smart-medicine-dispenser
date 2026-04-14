@@ -486,20 +486,29 @@
   }
 
   // ── Set Timer ───────────────────────────────────────────
-  function setTime(type) {
-    const ids   = ["morning", "afternoon", "night"];
-    const names = ["Morning",  "Afternoon",  "Night"];
+  // Blynk external API: one pin per request
+  // Morning  → V0=hour, V6=minute
+  // Afternoon→ V4=hour, V7=minute
+  // Night    → V5=hour, V8=minute
+  async function setTime(type) {
+    const ids      = ["morning",  "afternoon", "night"];
+    const names    = ["Morning",  "Afternoon", "Night"];
+    const hourPins = ["V0", "V4", "V5"];
+    const minPins  = ["V6", "V7", "V8"];
+
     const t = document.getElementById(ids[type]).value;
     if (!t) { showToast("⚠️ Please select a time first"); return; }
+
     const [h, m] = t.split(":");
-    const urls = [
-      `${BLYNK}/update?token=${TOKEN}&V0=${h}&V6=${m}`,
-      `${BLYNK}/update?token=${TOKEN}&V4=${h}&V7=${m}`,
-      `${BLYNK}/update?token=${TOKEN}&V5=${h}&V8=${m}`,
-    ];
-    fetch(urls[type])
-      .then(()  => showToast(`✅ ${names[type]} time set to ${t}`))
-      .catch(()  => showToast("❌ Failed. Check connection."));
+
+    try {
+      // Send hour first, then minute — separate requests
+      await fetch(`${BLYNK}/update?token=${TOKEN}&${hourPins[type]}=${parseInt(h)}`);
+      await fetch(`${BLYNK}/update?token=${TOKEN}&${minPins[type]}=${parseInt(m)}`);
+      showToast(`✅ ${names[type]} alarm set for ${t}`);
+    } catch (e) {
+      showToast("❌ Failed. Check connection.");
+    }
   }
 
   // ── Toast ───────────────────────────────────────────────
