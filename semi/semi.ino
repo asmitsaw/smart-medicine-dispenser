@@ -23,10 +23,16 @@ Servo myServo;
 #define ir1 34
 #define ir2 35
 
-int medHour = 10;
-int medMinute = 4;
+// 🔥 3 timers
+int medHour[3] = {10, 12, 18};
+int medMinute[3] = {0, 0, 0};
 
-bool alreadyTriggered = false;
+bool triggered[3] = {false, false, false};
+
+bool alertActive = false;
+unsigned long alertStart = 0;
+int activeTimer = -1;
+
 String lastStatus = "";
 
 // 🔥 STATUS
@@ -36,6 +42,13 @@ void updateStatus(String s) {
     Serial.println("Status: " + s);
     lastStatus = s;
   }
+}
+
+// 🔥 SERVO
+void dispenseMedicine() {
+  myServo.write(90);
+  delay(1500);
+  myServo.write(0);
 }
 
 // 🔥 LCD HOME
@@ -52,21 +65,28 @@ void showHome(DateTime now) {
   lcd.print("Waiting...     ");
 }
 
-// 🔥 SERVO
-void dispenseMedicine() {
-  myServo.write(90);
-  delay(2000);
-  myServo.write(0);
-}
-
-// 📱 TIME
+// 📱 TIMER 1
 BLYNK_WRITE(V0) {
   long t = param.asLong();
-  medHour = hour(t);
-  medMinute = minute(t);
+  medHour[0] = hour(t);
+  medMinute[0] = minute(t);
 }
 
-// 📱 BUTTON
+// 📱 TIMER 2
+BLYNK_WRITE(V4) {
+  long t = param.asLong();
+  medHour[1] = hour(t);
+  medMinute[1] = minute(t);
+}
+
+// 📱 TIMER 3
+BLYNK_WRITE(V5) {
+  long t = param.asLong();
+  medHour[2] = hour(t);
+  medMinute[2] = minute(t);
+}
+
+// 📱 MANUAL BUTTON
 BLYNK_WRITE(V1) {
   if (param.asInt()) dispenseMedicine();
 }
@@ -98,52 +118,79 @@ void loop() {
   Blynk.run();
 
   DateTime now = rtc.now();
-  showHome(now);
 
-  updateStatus("Waiting...");
+  // 🟢 HOME SCREEN
+  if (!alertActive) {
+    showHome(now);
+    updateStatus("Waiting...");
+  }
 
-  if (now.hour() == medHour && now.minute() == medMinute && !alreadyTriggered) {
+  // 🔥 CHECK ALL 3 TIMERS
+  for (int i = 0; i < 3; i++) {
+    if (now.hour() == medHour[i] &&
+        now.minute() == medMinute[i] &&
+        !triggered[i] &&
+        !alertActive) {
 
-    alreadyTriggered = true;
+      triggered[i] = true;
+      alertActive = true;
+      activeTimer = i;
+      alertStart = millis();
 
-    lcd.clear();
-    lcd.print("Take Medicine!");
-    updateStatus("Take Medicine!");
-
-    dispenseMedicine();
-
-    unsigned long start = millis();
-
-    while (millis() - start < 30000) {
-      Blynk.run();
-
-      if (digitalRead(ir1) == 0 && digitalRead(ir2) == 0) {
-
-        digitalWrite(buzzer, LOW);
-
-        lcd.clear();
-        lcd.print("Medicine Taken");
-        updateStatus("Medicine Taken");
-
-        delay(2000);
-        break;
-      }
-
-      digitalWrite(buzzer, HIGH);
-      delay(200);
-      digitalWrite(buzzer, LOW);
-      delay(200);
-    }
-
-    if (millis() - start >= 30000) {
       lcd.clear();
-      lcd.print("Missed Dose!");
-      updateStatus("Missed Dose");
-      delay(2000);
+      lcd.print("Take Medicine!");
+      updateStatus("Take Medicine!");
+
+      dispenseMedicine();
     }
   }
 
-  if (now.minute() != medMinute) alreadyTriggered = false;
+  // 🔔 ALERT MODE
+  if (alertActive) {
 
-  delay(500);
+    // 👀 SENSOR CHECK
+    if (digitalRead(ir1) == 0 && digitalRead(ir2) == 0) {
+
+      digitalWrite(buzzer, LOW);
+
+      lcd.clear();
+      lcd.print("Medicine Taken");
+      updateStatus("Medicine Taken");
+
+      delay(1500);
+      lcd.clear();
+
+      alertActive = false;
+    }
+
+    // ⏰ MISSED
+    else if (millis() - alertStart > 30000) {
+
+      lcd.clear();
+      lcd.print("Missed Dose!");
+      updateStatus("Missed Dose");
+
+      delay(1500);
+      lcd.clear();
+
+      alertActive = false;
+    }
+
+    // 🔊 NON-BLOCKING BUZZER
+    else {
+      static unsigned long lastBeep = 0;
+
+      if (millis() - lastBeep > 400) {
+        digitalWrite(buzzer, !digitalRead(buzzer));
+        lastBeep = millis();
+      }
+    }
+  }
+
+  // 🔄 RESET TRIGGER AFTER MINUTE PASSES
+  for (int i = 0; i < 3; i++) {
+    if (now.minute() != medMinute[i]) {
+      triggered[i] = false;
+    }
+  }
 }
