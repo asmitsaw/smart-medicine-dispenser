@@ -129,18 +129,37 @@ void syncRTCfromNTP() {
 }
 
 // ── TIMER CALLBACKS ───────────────────────────────────────
-// Web app sends: V0=hour, V6=minute (morning)
-//                V4=hour, V7=minute (afternoon)
-//                V5=hour, V8=minute (night)
+// Web app sends a full "HH:MM" string on a SINGLE pin.
+// V0 = Morning,  V4 = Afternoon,  V5 = Night
 
-BLYNK_WRITE(V0) { medHour[0]   = param.asInt(); Serial.printf("[TIMER] Morning   hour   = %d\n", medHour[0]); }
-BLYNK_WRITE(V6) { medMinute[0] = param.asInt(); Serial.printf("[TIMER] Morning   minute = %d\n", medMinute[0]); }
+void parseTime(const char* s, int& hr, int& mn) {
+  // Accepts "08:30" or plain int like "8" (legacy fallback)
+  char buf[6];
+  strncpy(buf, s, 5); buf[5] = '\0';
+  char* colon = strchr(buf, ':');
+  if (colon) {
+    *colon = '\0';
+    hr = atoi(buf);
+    mn = atoi(colon + 1);
+  } else {
+    hr = atoi(buf);   // bare hour, minute stays unchanged
+  }
+}
 
-BLYNK_WRITE(V4) { medHour[1]   = param.asInt(); Serial.printf("[TIMER] Afternoon hour   = %d\n", medHour[1]); }
-BLYNK_WRITE(V7) { medMinute[1] = param.asInt(); Serial.printf("[TIMER] Afternoon minute = %d\n", medMinute[1]); }
+BLYNK_WRITE(V0) {
+  parseTime(param.asStr(), medHour[0], medMinute[0]);
+  Serial.printf("[TIMER] Morning   -> %02d:%02d\n", medHour[0], medMinute[0]);
+}
 
-BLYNK_WRITE(V5) { medHour[2]   = param.asInt(); Serial.printf("[TIMER] Night     hour   = %d\n", medHour[2]); }
-BLYNK_WRITE(V8) { medMinute[2] = param.asInt(); Serial.printf("[TIMER] Night     minute = %d\n", medMinute[2]); }
+BLYNK_WRITE(V4) {
+  parseTime(param.asStr(), medHour[1], medMinute[1]);
+  Serial.printf("[TIMER] Afternoon -> %02d:%02d\n", medHour[1], medMinute[1]);
+}
+
+BLYNK_WRITE(V5) {
+  parseTime(param.asStr(), medHour[2], medMinute[2]);
+  Serial.printf("[TIMER] Night     -> %02d:%02d\n", medHour[2], medMinute[2]);
+}
 
 // Manual dispense
 BLYNK_WRITE(V1) {
@@ -177,6 +196,12 @@ BLYNK_WRITE(V9) {
     lcd.clear();
     alertActive = false;
   }
+}
+
+// ── RECONNECT: pull saved timer values from Blynk cloud ──
+BLYNK_CONNECTED() {
+  Serial.println("[BLYNK] Connected - syncing V0/V4/V5...");
+  Blynk.syncVirtual(V0, V4, V5);  // only the 3 timer pins
 }
 
 // ── SETUP ─────────────────────────────────────────────────
@@ -220,14 +245,20 @@ void setup() {
 }
 
 // ── LOOP ──────────────────────────────────────────────────
+static unsigned long lastBeep    = 0;  // global so buzzer is truly non-blocking
+static unsigned long lastLcdDraw = 0;  // throttle LCD/status writes
+
 void loop() {
   Blynk.run();
   DateTime now = rtc.now();
 
-  // ── NORMAL MODE ─────────────────────────────────────────
+  // ── NORMAL MODE — throttled to 1 s ──────────────────────
   if (!alertActive && !awaitingCamConfirm) {
-    showHome(now);
-    updateStatus("Waiting...");
+    if (millis() - lastLcdDraw > 1000) {
+      showHome(now);
+      updateStatus("Waiting...");
+      lastLcdDraw = millis();
+    }
   }
 
   // ── CHECK ALL DOSE TIMERS ────────────────────────────────
@@ -257,8 +288,6 @@ void loop() {
   if (alertActive) {
 
     // 1️⃣ BUZZER — beeps for entire alert duration (non-blocking)
-    // Placed first so it runs every loop regardless of what resolves below
-    static unsigned long lastBeep = 0;
     if (millis() - lastBeep > 400) {
       digitalWrite(buzzer, !digitalRead(buzzer));
       lastBeep = millis();
@@ -317,9 +346,10 @@ void loop() {
     }
   }
 
-  // ── RESET TRIGGERS (minute changed) ──────────────────────
+  // ── RESET TRIGGERS ───────────────────────────────────────
+  // Re-arm only when the HH:MM has moved past the scheduled time
   for (int i = 0; i < 3; i++) {
-    if (now.minute() != medMinute[i]) {
+    if (now.hour() != medHour[i] || now.minute() != medMinute[i]) {
       triggered[i] = false;
     }
   }
