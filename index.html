@@ -356,6 +356,29 @@
       0%,100% { box-shadow: var(--shadow); }
       50%      { box-shadow: 8px 8px 0 var(--yellow); }
     }
+
+    /* ─── INSTALL BUTTON ────────────────────────────────── */
+    #install-btn {
+      display: none;  /* shown only when installable */
+      background: var(--cyan);
+      border: var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 7px 14px;
+      font-family: var(--font);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.1s, box-shadow 0.1s;
+      animation: install-pulse 2s infinite;
+    }
+    #install-btn.visible { display: flex; }
+    #install-btn:active  { transform: translate(3px,3px); box-shadow: none; }
+    @keyframes install-pulse {
+      0%,100% { box-shadow: var(--shadow-sm); }
+      50%      { box-shadow: 6px 6px 0 var(--green); }
+    }
   </style>
 </head>
 <body>
@@ -364,6 +387,7 @@
 <header>
   <h1>💊 Smart Medicine Dispenser</h1>
   <div style="display:flex;align-items:center;gap:10px;">
+    <button id="install-btn" onclick="installPWA()" title="Install as app">📲 Install App</button>
     <button id="notif-btn" onclick="requestPush()" title="Enable push notifications">🔔 Notify</button>
     <div id="header-clock">--:--:--</div>
   </div>
@@ -713,11 +737,48 @@
   if ("Notification" in window) updateNotifBtn();
   else { notifBtn.style.display = "none"; }
 
-  // ── Service Worker ──────────────────────────────────────
+  // ── Service Worker + PWA Install ────────────────────────
+  const installBtn = document.getElementById("install-btn");
+  let deferredInstallPrompt = null;
+
+  // Capture the browser's install prompt before it fires
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installBtn.classList.add("visible");   // show the install button
+    console.log("[PWA] Install prompt ready");
+  });
+
+  // User clicked Install App
+  async function installPWA() {
+    if (!deferredInstallPrompt) {
+      showToast("📲 Open in Chrome to install");
+      return;
+    }
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === "accepted") {
+      showToast("✅ App installed! Open from your home screen.");
+      installBtn.classList.remove("visible");
+    } else {
+      showToast("ℹ️ Install cancelled");
+    }
+    deferredInstallPrompt = null;
+  }
+
+  // App was installed — hide button
+  window.addEventListener("appinstalled", () => {
+    installBtn.classList.remove("visible");
+    deferredInstallPrompt = null;
+    showToast("🎉 MedBox installed successfully!");
+    console.log("[PWA] App installed");
+  });
+
+  // Register Service Worker
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js")
-      .then(reg => console.log("SW registered:", reg.scope))
-      .catch(err => console.warn("SW error:", err));
+      .then(reg => console.log("[SW] Registered:", reg.scope))
+      .catch(err => console.warn("[SW] Error:", err));
   }
 </script>
 
