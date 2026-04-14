@@ -1,5 +1,4 @@
-const CACHE_NAME = "med-app-v1";
-
+const CACHE_NAME = "med-app-v11";
 self.addEventListener("install", e => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => {

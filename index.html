@@ -1,253 +1,543 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smart Medicine System</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>💊 Smart Medicine Dispenser</title>
+  <meta name="description" content="Smart automated medicine dispenser with scheduled dosing, real-time status, and manual control via Blynk.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ─── RESET & TOKENS ──────────────────────────────────── */
+    *, *::before, *::after {
+      margin: 0; padding: 0;
+      box-sizing: border-box;
+    }
 
-<link rel="manifest" href="manifest.json">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    :root {
+      --black:   #0d0d0d;
+      --white:   #fafafa;
+      --cream:   #fffbf0;
+      --yellow:  #ffd60a;
+      --cyan:    #00e5d4;
+      --pink:    #ff4d6d;
+      --purple:  #9b5de5;
+      --green:   #06d6a0;
+      --red:     #ef233c;
+      --border:  3px solid var(--black);
+      --shadow:  6px 6px 0 var(--black);
+      --shadow-sm: 4px 4px 0 var(--black);
+      --radius:  0px;
+      --font:    'Space Grotesk', system-ui, sans-serif;
+    }
 
-<style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system, BlinkMacSystemFont, sans-serif;}
+    html { scroll-behavior: smooth; }
 
-body{
-  background:linear-gradient(135deg,#0f172a,#020617);
-  color:white;
-  padding:20px;
-}
+    body {
+      background: var(--cream);
+      color: var(--black);
+      font-family: var(--font);
+      min-height: 100vh;
+      padding: 0;
+    }
 
-/* HEADER */
-h1{
-  text-align:center;
-  margin-bottom:20px;
-  font-size:26px;
-}
+    /* ─── HEADER ──────────────────────────────────────────── */
+    header {
+      background: var(--black);
+      color: var(--yellow);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 
-/* GRID */
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-  gap:20px;
-}
+    header h1 {
+      font-size: clamp(1.1rem, 4vw, 1.5rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
 
-/* GLASS + BRUTAL CARD */
-.card{
-  backdrop-filter:blur(14px);
-  background:rgba(255,255,255,0.05);
-  border:2px solid white;
-  border-radius:18px;
-  padding:20px;
-  box-shadow:6px 6px 0px #000;
-  transition:0.25s;
-}
+    #header-clock {
+      font-size: clamp(0.85rem, 3vw, 1.1rem);
+      font-weight: 700;
+      background: var(--yellow);
+      color: var(--black);
+      padding: 6px 14px;
+      border: 2px solid var(--yellow);
+      font-variant-numeric: tabular-nums;
+    }
 
-.card:hover{
-  transform:translateY(-5px);
-}
+    /* ─── MAIN LAYOUT ─────────────────────────────────────── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 28px 16px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
 
-/* STATUS */
-.status{
-  font-size:22px;
-  font-weight:bold;
-}
+    /* ─── SECTION LABEL ───────────────────────────────────── */
+    .section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--black);
+      opacity: 0.45;
+      margin-bottom: 6px;
+    }
 
-.badge{
-  margin-top:8px;
-  padding:6px 10px;
-  border-radius:20px;
-  font-size:12px;
-  display:inline-block;
-}
+    /* ─── CARD ────────────────────────────────────────────── */
+    .card {
+      background: var(--white);
+      border: var(--border);
+      box-shadow: var(--shadow);
+      padding: 22px 20px;
+      position: relative;
+      transition: box-shadow 0.15s, transform 0.15s;
+    }
 
-.online{background:#22c55e;}
-.offline{background:#ef4444;}
+    .card:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 8px 8px 0 var(--black);
+    }
 
-/* BUTTON */
-button{
-  width:100%;
-  padding:12px;
-  border:none;
-  border-radius:12px;
-  background:linear-gradient(135deg,#22c55e,#16a34a);
-  color:white;
-  font-size:16px;
-  cursor:pointer;
-  transition:0.2s;
-}
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-button:active{transform:scale(0.95);}
+    /* ─── GRID ────────────────────────────────────────────── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
 
-/* INPUT */
-input{
-  width:100%;
-  padding:12px;
-  border-radius:10px;
-  border:none;
-  margin-top:10px;
-}
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
 
-/* POPUP */
-#popup{
-  position:fixed;
-  bottom:20px;
-  right:20px;
-  padding:15px;
-  border-radius:12px;
-  background:black;
-  display:none;
-  animation:fade 0.3s ease;
-}
+    @media (max-width: 620px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-3 { grid-template-columns: 1fr; }
+    }
 
-@keyframes fade{
-  from{opacity:0; transform:translateY(10px);}
-  to{opacity:1;}
-}
-</style>
+    /* ─── STATUS BADGE ────────────────────────────────────── */
+    .status-value {
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-bottom: 12px;
+      min-height: 34px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 14px;
+      border: 2px solid var(--black);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .badge-online  { background: var(--green);  }
+    .badge-offline { background: var(--red); color: var(--white); }
+    .badge-warn    { background: var(--yellow); }
+
+    /* ─── PILL ACCENT ─────────────────────────────────────── */
+    .card-accent-yellow { border-top: 5px solid var(--yellow); }
+    .card-accent-cyan   { border-top: 5px solid var(--cyan);   }
+    .card-accent-pink   { border-top: 5px solid var(--pink);   }
+    .card-accent-purple { border-top: 5px solid var(--purple); }
+    .card-accent-green  { border-top: 5px solid var(--green);  }
+
+    /* ─── BUTTONS ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 13px 18px;
+      border: var(--border);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.1s, box-shadow 0.1s;
+      letter-spacing: 0.02em;
+    }
+
+    .btn:active {
+      transform: translate(4px, 4px);
+      box-shadow: none;
+    }
+
+    .btn-yellow { background: var(--yellow); color: var(--black); }
+    .btn-cyan   { background: var(--cyan);   color: var(--black); }
+    .btn-pink   { background: var(--pink);   color: var(--white); }
+    .btn-purple { background: var(--purple); color: var(--white); }
+    .btn-green  { background: var(--green);  color: var(--black); }
+    .btn-black  { background: var(--black);  color: var(--yellow); }
+
+    /* ─── INPUT ───────────────────────────────────────────── */
+    .time-input {
+      width: 100%;
+      padding: 12px 14px;
+      border: var(--border);
+      font-family: var(--font);
+      font-size: 1.15rem;
+      font-weight: 700;
+      background: var(--cream);
+      margin-bottom: 12px;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.05em;
+      transition: background 0.15s;
+    }
+
+    .time-input:focus {
+      background: var(--yellow);
+      box-shadow: inset 0 0 0 2px var(--black);
+    }
+
+    /* ─── TIMER LABEL ─────────────────────────────────────── */
+    .timer-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.55;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    /* ─── CHART WRAPPER ───────────────────────────────────── */
+    .chart-wrap {
+      max-width: 220px;
+      margin: 0 auto;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 14px;
+      gap: 12px;
+    }
+
+    .stat-box {
+      flex: 1;
+      text-align: center;
+      border: 2px solid var(--black);
+      padding: 10px 6px;
+    }
+
+    .stat-box .stat-num {
+      font-size: 1.6rem;
+      font-weight: 800;
+    }
+
+    .stat-box .stat-lbl {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.5;
+    }
+
+    .stat-taken .stat-num { color: #059669; }
+    .stat-missed .stat-num { color: var(--red); }
+
+    /* ─── BIG DISPENSE ────────────────────────────────────── */
+    #dispense-btn {
+      font-size: 1.1rem;
+      padding: 18px;
+      letter-spacing: 0.05em;
+    }
+
+    /* ─── TOAST POPUP ─────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 20px;
+      background: var(--black);
+      color: var(--yellow);
+      padding: 14px 20px;
+      border: 3px solid var(--yellow);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+      z-index: 9999;
+      display: none;
+      max-width: 280px;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    /* ─── DIVIDER ─────────────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 2px solid var(--black);
+      opacity: 0.1;
+      margin: 4px 0;
+    }
+
+    /* ─── FOOTER ──────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      opacity: 0.35;
+      border-top: 2px solid var(--black);
+    }
+  </style>
 </head>
-
 <body>
 
-<h1>💊 Smart Medicine System</h1>
+<!-- ── HEADER ──────────────────────────────────────────────── -->
+<header>
+  <h1>💊 Smart Medicine Dispenser</h1>
+  <div id="header-clock">--:--:--</div>
+</header>
 
-<div class="grid">
+<!-- ── MAIN ─────────────────────────────────────────────────── -->
+<main>
 
-<div class="card">
-<h2>Status</h2>
-<div id="status" class="status">Loading...</div>
-<div id="connection" class="badge online">Online</div>
-</div>
+  <!-- ROW 1: Status + Manual Control -->
+  <div class="grid-2">
 
-<div class="card">
-<h2>Time</h2>
-<div id="clock" class="status"></div>
-</div>
+    <!-- STATUS CARD -->
+    <div class="card card-accent-cyan">
+      <p class="section-label">Device Status</p>
+      <h2>📡 Live Status</h2>
+      <div id="status" class="status-value">Loading…</div>
+      <span id="connection" class="badge badge-online">● Online</span>
+    </div>
 
-<div class="card">
-<h2>Manual</h2>
-<button onclick="dispense()">Dispense</button>
-</div>
+    <!-- MANUAL DISPENSE CARD -->
+    <div class="card card-accent-yellow">
+      <p class="section-label">Manual Override</p>
+      <h2>🖐️ Dispense Now</h2>
+      <p style="font-size:0.82rem; opacity:0.6; margin-bottom:16px; font-weight:500;">
+        Immediately trigger one dose release via Blynk.
+      </p>
+      <button id="dispense-btn" class="btn btn-yellow" onclick="dispense()">
+        ⚡ Dispense Medicine
+      </button>
+    </div>
 
-<div class="card">
-<h2>Set Time</h2>
-<input type="time" id="timeInput">
-<button onclick="setTime()">Set</button>
-</div>
+  </div>
 
-<div class="card">
-<h2>Medicine Stats</h2>
-<canvas id="chart"></canvas>
-</div>
+  <!-- ROW 2: Timer Cards -->
+  <div>
+    <p class="section-label">Schedule — Set Dosing Times</p>
+    <div class="grid-3">
 
-</div>
+      <!-- MORNING -->
+      <div class="card card-accent-yellow">
+        <h2>🌅 Morning</h2>
+        <span class="timer-label">Dose Time</span>
+        <input class="time-input" type="time" id="morning" aria-label="Morning medicine time">
+        <button class="btn btn-yellow" onclick="setTime(0)">Set Morning</button>
+      </div>
 
-<div id="popup"><span id="popupText"></span></div>
+      <!-- AFTERNOON -->
+      <div class="card card-accent-pink">
+        <h2>☀️ Afternoon</h2>
+        <span class="timer-label">Dose Time</span>
+        <input class="time-input" type="time" id="afternoon" aria-label="Afternoon medicine time">
+        <button class="btn btn-pink" onclick="setTime(1)">Set Afternoon</button>
+      </div>
 
+      <!-- NIGHT -->
+      <div class="card card-accent-purple">
+        <h2>🌙 Night</h2>
+        <span class="timer-label">Dose Time</span>
+        <input class="time-input" type="time" id="night" aria-label="Night medicine time">
+        <button class="btn btn-purple" onclick="setTime(2)">Set Night</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ROW 3: Stats Chart -->
+  <div class="card card-accent-green">
+    <p class="section-label">Today's Summary</p>
+    <h2>📊 Medicine Stats</h2>
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box stat-taken">
+        <div class="stat-num" id="taken-count">0</div>
+        <div class="stat-lbl">Taken</div>
+      </div>
+      <div class="stat-box stat-missed">
+        <div class="stat-num" id="missed-count">0</div>
+        <div class="stat-lbl">Missed</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── TOAST ──────────────────────────────────────────────────── -->
+<div id="toast" role="alert" aria-live="assertive"></div>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────── -->
+<footer>Smart Medicine Dispenser · Powered by Blynk IoT</footer>
+
+<!-- ── SCRIPT ─────────────────────────────────────────────────── -->
 <script>
-const token = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU";
+  const TOKEN = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU";
 
-// CLOCK
-setInterval(()=>{
- clock.innerText=new Date().toLocaleTimeString();
-},1000);
+  // ── DOM refs
+  const clockEl      = document.getElementById("header-clock");
+  const statusEl     = document.getElementById("status");
+  const connectionEl = document.getElementById("connection");
+  const takenCountEl = document.getElementById("taken-count");
+  const missedCountEl= document.getElementById("missed-count");
+  const toast        = document.getElementById("toast");
 
-// DISPENSE
-function dispense(){
- fetch(`https://blynk.cloud/external/api/update?token=${token}&V1=1`);
- speak("Dispensing medicine");
-}
-
-// SET TIME
-function setTime(){
- let t=timeInput.value;
- if(!t) return alert("Select time");
-
- let [h,m]=t.split(":");
- fetch(`https://blynk.cloud/external/api/update?token=${token}&V0=${h*3600+m*60}`);
-
- showPopup("Time Updated");
-}
-
-// 🔔 VOICE ALERT
-function speak(text){
- let speech=new SpeechSynthesisUtterance(text);
- speech.lang="en-US";
- speech.rate=1;
- window.speechSynthesis.speak(speech);
-}
-
-// POPUP
-function showPopup(msg){
- popupText.innerText=msg;
- popup.style.display="block";
- setTimeout(()=>popup.style.display="none",3000);
-}
-
-// CHART
-let taken=parseInt(localStorage.getItem("taken"))||0;
-let missed=parseInt(localStorage.getItem("missed"))||0;
-
-let chart=new Chart(chart,{
- type:'doughnut',
- data:{
-  labels:['Taken','Missed'],
-  datasets:[{
-    data:[taken,missed],
-    backgroundColor:['#22c55e','#ef4444']
-  }]
- }
-});
-
-// STATUS + CLOUD LOG SIMULATION
-let last="";
-function getStatus(){
- fetch(`https://blynk.cloud/external/api/get?token=${token}&V3`)
- .then(r=>r.text())
- .then(d=>{
-  status.innerText=d;
-
-  if(d!=last){
-
-    if(d.includes("Take")){
-      showPopup("⏰ Time to take medicine");
-      speak("Time to take medicine");
-    }
-
-    if(d.includes("Taken")){
-      taken++;
-      localStorage.setItem("taken",taken);
-      showPopup("Medicine Taken");
-    }
-
-    if(d.includes("Missed")){
-      missed++;
-      localStorage.setItem("missed",missed);
-      showPopup("Missed Dose");
-    }
-
-    chart.data.datasets[0].data=[taken,missed];
-    chart.update();
-
-    last=d;
+  // ── Live Clock
+  function updateClock() {
+    clockEl.textContent = new Date().toLocaleTimeString("en-IN", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
   }
- })
- .catch(()=>{
-  connection.innerText="Offline";
-  connection.className="badge offline";
- });
-}
+  updateClock();
+  setInterval(updateClock, 1000);
 
-getStatus();
-setInterval(getStatus,2000);
+  // ── Dispense
+  function dispense() {
+    fetch(`https://blynk.cloud/external/api/update?token=${TOKEN}&V1=1`);
+    showToast("⚡ Dispensing medicine now…");
+  }
 
-// PUSH NOTIFICATION
-if("Notification" in window){
- Notification.requestPermission();
-}
+  // ── Set Timer (type: 0=morning, 1=afternoon, 2=night)
+  function setTime(type) {
+    const ids  = ["morning", "afternoon", "night"];
+    const names = ["Morning", "Afternoon", "Night"];
+    const t = document.getElementById(ids[type]).value;
+    if (!t) { showToast("⚠️ Please select a time first"); return; }
 
-// PWA
-if('serviceWorker' in navigator){
- navigator.serviceWorker.register('sw.js');
-}
+    const [h, m] = t.split(":");
+    const urls = [
+      `https://blynk.cloud/external/api/update?token=${TOKEN}&V0=${h}&V6=${m}`,
+      `https://blynk.cloud/external/api/update?token=${TOKEN}&V4=${h}&V7=${m}`,
+      `https://blynk.cloud/external/api/update?token=${TOKEN}&V5=${h}&V8=${m}`,
+    ];
+
+    fetch(urls[type]).then(() => {
+      showToast(`✅ ${names[type]} time set to ${t}`);
+    }).catch(() => {
+      showToast("❌ Failed to update. Check connection.");
+    });
+  }
+
+  // ── Toast
+  let toastTimer;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.style.display = "block";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.style.display = "none"; }, 3200);
+  }
+
+  // ── Stats
+  let taken  = Number(localStorage.getItem("taken")  || 0);
+  let missed = Number(localStorage.getItem("missed") || 0);
+
+  takenCountEl.textContent  = taken;
+  missedCountEl.textContent = missed;
+
+  const chart = new Chart(document.getElementById("chart"), {
+    type: "doughnut",
+    data: {
+      labels: ["Taken", "Missed"],
+      datasets: [{
+        data: [taken, missed],
+        backgroundColor: ["#06d6a0", "#ef233c"],
+        borderColor: ["#0d0d0d", "#0d0d0d"],
+        borderWidth: 3,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          labels: {
+            font: { family: "'Space Grotesk'", weight: "700", size: 13 },
+            color: "#0d0d0d",
+          }
+        }
+      },
+      cutout: "60%",
+    }
+  });
+
+  // ── Device Status Polling
+  let lastStatus = "";
+  function getStatus() {
+    fetch(`https://blynk.cloud/external/api/get?token=${TOKEN}&V3`)
+      .then(r => r.text())
+      .then(d => {
+        statusEl.textContent = d;
+
+        connectionEl.textContent = "● Online";
+        connectionEl.className = "badge badge-online";
+
+        if (d !== lastStatus) {
+          if (d.includes("Take"))  { showToast("⏰ Time to take your medicine!"); }
+          if (d.includes("Taken")) {
+            taken++;
+            localStorage.setItem("taken", taken);
+            takenCountEl.textContent = taken;
+          }
+          if (d.includes("Missed")) {
+            missed++;
+            localStorage.setItem("missed", missed);
+            missedCountEl.textContent = missed;
+          }
+          chart.data.datasets[0].data = [taken, missed];
+          chart.update();
+          lastStatus = d;
+        }
+      })
+      .catch(() => {
+        connectionEl.textContent = "● Offline";
+        connectionEl.className = "badge badge-offline";
+      });
+  }
+
+  getStatus();
+  setInterval(getStatus, 2000);
+
+  // ── Service Worker
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js");
+  }
 </script>
 
 </body>

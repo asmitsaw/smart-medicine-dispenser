@@ -12,30 +12,31 @@
 #include <ESP32Servo.h>
 #include <TimeLib.h>
 
-char ssid[] = "WHITE_DEVIL";
-char pass[] = "sunita@1974";
+char ssid[] = "Asmit's F55";
+char pass[] = "12345678";
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 RTC_DS1307 rtc;
 Servo myServo;
 
+// PINS
 #define buzzer 27
 #define ir1 34
 #define ir2 35
 
-// 🔥 3 timers
-int medHour[3] = {10, 12, 18};
-int medMinute[3] = {0, 0, 0};
+// 3 TIMERS
+int medHour[3]   = {10, 12, 18};
+int medMinute[3] = {0,  0,  0};
 
 bool triggered[3] = {false, false, false};
 
+// ALERT SYSTEM
 bool alertActive = false;
 unsigned long alertStart = 0;
-int activeTimer = -1;
 
 String lastStatus = "";
 
-// 🔥 STATUS
+// ================= STATUS =================
 void updateStatus(String s) {
   if (s != lastStatus) {
     Blynk.virtualWrite(V3, s);
@@ -44,14 +45,14 @@ void updateStatus(String s) {
   }
 }
 
-// 🔥 SERVO
+// ================= SERVO =================
 void dispenseMedicine() {
   myServo.write(90);
-  delay(1500);
+  delay(1200);
   myServo.write(0);
 }
 
-// 🔥 LCD HOME
+// ================= LCD =================
 void showHome(DateTime now) {
   char t[9];
   sprintf(t, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
@@ -65,40 +66,57 @@ void showHome(DateTime now) {
   lcd.print("Waiting...     ");
 }
 
-// 📱 TIMER 1
+// ================= BLYNK =================
+
+// TIMER 1
 BLYNK_WRITE(V0) {
   long t = param.asLong();
   medHour[0] = hour(t);
   medMinute[0] = minute(t);
 }
 
-// 📱 TIMER 2
+// TIMER 2
 BLYNK_WRITE(V4) {
   long t = param.asLong();
   medHour[1] = hour(t);
   medMinute[1] = minute(t);
 }
 
-// 📱 TIMER 3
+// TIMER 3
 BLYNK_WRITE(V5) {
   long t = param.asLong();
   medHour[2] = hour(t);
   medMinute[2] = minute(t);
 }
 
-// 📱 MANUAL BUTTON
+// MANUAL DISPENSE
 BLYNK_WRITE(V1) {
-  if (param.asInt()) dispenseMedicine();
+  if (param.asInt() == 1) {
+    dispenseMedicine();
+    updateStatus("Manual Dispense");
+  }
 }
 
+// ================= SETUP =================
 void setup() {
   Serial.begin(115200);
 
   Wire.begin(21, 22);
+
   lcd.init();
   lcd.backlight();
 
-  rtc.begin();
+  if (!rtc.begin()) {
+    Serial.println("RTC NOT FOUND");
+    while (1);
+  }
+
+  // 🔥 FIX: Ensure RTC has time
+  if (!rtc.isrunning()) {
+    Serial.println("Setting RTC time...");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+
   myServo.attach(13);
 
   pinMode(buzzer, OUTPUT);
@@ -107,25 +125,29 @@ void setup() {
 
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
+  lcd.setCursor(0, 0);
   lcd.print("Smart Med Box");
+  lcd.setCursor(0, 1);
+  lcd.print("Starting...");
   delay(2000);
   lcd.clear();
 
   updateStatus("System Ready");
 }
 
+// ================= LOOP =================
 void loop() {
   Blynk.run();
 
   DateTime now = rtc.now();
 
-  // 🟢 HOME SCREEN
+  // 🟢 NORMAL MODE
   if (!alertActive) {
     showHome(now);
     updateStatus("Waiting...");
   }
 
-  // 🔥 CHECK ALL 3 TIMERS
+  // 🔥 CHECK ALL TIMERS
   for (int i = 0; i < 3; i++) {
     if (now.hour() == medHour[i] &&
         now.minute() == medMinute[i] &&
@@ -134,11 +156,12 @@ void loop() {
 
       triggered[i] = true;
       alertActive = true;
-      activeTimer = i;
       alertStart = millis();
 
       lcd.clear();
+      lcd.setCursor(0, 0);
       lcd.print("Take Medicine!");
+
       updateStatus("Take Medicine!");
 
       dispenseMedicine();
@@ -154,7 +177,9 @@ void loop() {
       digitalWrite(buzzer, LOW);
 
       lcd.clear();
+      lcd.setCursor(0, 0);
       lcd.print("Medicine Taken");
+
       updateStatus("Medicine Taken");
 
       delay(1500);
@@ -163,11 +188,13 @@ void loop() {
       alertActive = false;
     }
 
-    // ⏰ MISSED
+    // ⏰ MISSED DOSE
     else if (millis() - alertStart > 30000) {
 
       lcd.clear();
+      lcd.setCursor(0, 0);
       lcd.print("Missed Dose!");
+
       updateStatus("Missed Dose");
 
       delay(1500);
@@ -176,7 +203,7 @@ void loop() {
       alertActive = false;
     }
 
-    // 🔊 NON-BLOCKING BUZZER
+    // 🔊 BUZZER (NON-BLOCKING)
     else {
       static unsigned long lastBeep = 0;
 
@@ -187,7 +214,7 @@ void loop() {
     }
   }
 
-  // 🔄 RESET TRIGGER AFTER MINUTE PASSES
+  // 🔄 RESET TRIGGERS
   for (int i = 0; i < 3; i++) {
     if (now.minute() != medMinute[i]) {
       triggered[i] = false;
