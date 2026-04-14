@@ -129,35 +129,28 @@ void syncRTCfromNTP() {
 }
 
 // ── TIMER CALLBACKS ───────────────────────────────────────
-// Web app sends a full "HH:MM" string on a SINGLE pin.
-// V0 = Morning,  V4 = Afternoon,  V5 = Night
+// V0/V4/V5 are Blynk Time Input widgets → they store
+// SECONDS FROM MIDNIGHT (0–86400).
+// e.g. 08:30 → 30600   |   23:51 → 85860
 
-void parseTime(const char* s, int& hr, int& mn) {
-  // Accepts "08:30" or plain int like "8" (legacy fallback)
-  char buf[6];
-  strncpy(buf, s, 5); buf[5] = '\0';
-  char* colon = strchr(buf, ':');
-  if (colon) {
-    *colon = '\0';
-    hr = atoi(buf);
-    mn = atoi(colon + 1);
-  } else {
-    hr = atoi(buf);   // bare hour, minute stays unchanged
-  }
+void unpackTime(long sec, int& hr, int& mn) {
+  if (sec <= 0) return;          // 0 means widget not set yet
+  hr = (int)(sec / 3600);
+  mn = (int)((sec % 3600) / 60);
 }
 
 BLYNK_WRITE(V0) {
-  parseTime(param.asStr(), medHour[0], medMinute[0]);
+  unpackTime(param.asLong(), medHour[0], medMinute[0]);
   Serial.printf("[TIMER] Morning   -> %02d:%02d\n", medHour[0], medMinute[0]);
 }
 
 BLYNK_WRITE(V4) {
-  parseTime(param.asStr(), medHour[1], medMinute[1]);
+  unpackTime(param.asLong(), medHour[1], medMinute[1]);
   Serial.printf("[TIMER] Afternoon -> %02d:%02d\n", medHour[1], medMinute[1]);
 }
 
 BLYNK_WRITE(V5) {
-  parseTime(param.asStr(), medHour[2], medMinute[2]);
+  unpackTime(param.asLong(), medHour[2], medMinute[2]);
   Serial.printf("[TIMER] Night     -> %02d:%02d\n", medHour[2], medMinute[2]);
 }
 

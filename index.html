@@ -486,24 +486,27 @@
   }
 
   // ── Set Timer ───────────────────────────────────────────
-  // Sends full "HH:MM" string to ONE pin per timer.
-  // V0=Morning, V4=Afternoon, V5=Night
-  // Only 3 Blynk datastreams needed, one write per timer.
+  // V0/V4/V5 are Time Input widgets → Blynk expects SECONDS FROM MIDNIGHT
+  // 08:30 → 8×3600 + 30×60 = 30600
+  // 23:51 → 23×3600 + 51×60 = 85860
   async function setTime(type) {
-    const ids   = ["morning",   "afternoon", "night"];
-    const names = ["Morning",   "Afternoon", "Night"];
-    const pins  = ["V0",        "V4",        "V5"];
+    const ids   = ["morning",  "afternoon", "night"];
+    const names = ["Morning",  "Afternoon", "Night"];
+    const pins  = ["V0",       "V4",        "V5"];
 
-    const t = document.getElementById(ids[type]).value; // "HH:MM"
+    const t = document.getElementById(ids[type]).value; // "HH:MM" 24h
     if (!t) { showToast("⚠️ Please select a time first"); return; }
 
+    const [h, m] = t.split(":").map(Number);
+    const secs = h * 3600 + m * 60;   // seconds from midnight
+
     try {
-      const url = `${BLYNK}/update?token=${TOKEN}&${pins[type]}=${encodeURIComponent(t)}`;
+      const url = `${BLYNK}/update?token=${TOKEN}&${pins[type]}=${secs}`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error(res.status);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       showToast(`✅ ${names[type]} alarm set for ${t}`);
     } catch (e) {
-      showToast("❌ Failed. Check connection.");
+      showToast(`❌ ${e.message} — check Blynk datastream config`);
     }
   }
 
