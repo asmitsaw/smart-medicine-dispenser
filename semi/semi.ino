@@ -23,7 +23,7 @@ Servo myServo;
 #define buzzer 27
 #define ir1    34
 #define ir2    35
-
+#define buttonPin 25
 // ── 3 DOSE TIMERS ─────────────────────────────────────────
 int medHour[3]   = {10, 12, 18};
 int medMinute[3] = { 0,  0,  0};
@@ -204,7 +204,7 @@ void setup() {
 
   lcd.init();
   lcd.backlight();
-
+  pinMode(buttonPin, INPUT_PULLUP);
   if (!rtc.begin()) {
     Serial.println("RTC NOT FOUND");
     while (1);
@@ -253,7 +253,32 @@ void loop() {
       lastLcdDraw = millis();
     }
   }
+static bool lastButtonState = HIGH;
+static unsigned long lastPress = 0;
 
+bool currentButtonState = digitalRead(buttonPin);
+
+// Detect press safely
+if (lastButtonState == HIGH && currentButtonState == LOW &&
+    !alertActive && !awaitingCamConfirm &&
+    millis() - lastPress > 800) {
+
+  lastPress = millis();
+
+  Serial.println("[BUTTON] Manual dispense triggered");
+
+  dispenseMedicine();
+  updateStatus("Manual Dispense");
+
+  Blynk.virtualWrite(V2, 1);
+  awaitingCamConfirm = true;
+  dispensedAt = millis();
+
+  sendPushEvent("Medicine dispensed manually (button)!");
+}
+
+
+lastButtonState = currentButtonState;
   // ── CHECK ALL DOSE TIMERS ────────────────────────────────
   for (int i = 0; i < 3; i++) {
     if (now.hour()   == medHour[i] &&
