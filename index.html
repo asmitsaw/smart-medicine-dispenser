@@ -22,6 +22,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Firebase v8 (compat API) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
     /* ─── RESET & TOKENS ──────────────────────────────────── */
     *, *::before, *::after {
@@ -482,6 +485,15 @@
     </div>
   </div>
 
+  <!-- ROW 4: History Log -->
+  <div class="card card-accent-purple" style="grid-column: 1 / -1;">
+    <p class="section-label">Firebase Cloud Sync</p>
+    <h2>📋 Medicine History Log</h2>
+    <div id="history-list" style="max-height:220px; overflow-y:auto; margin-top:14px; font-size:0.9rem;">
+      <div style="opacity:0.5; padding:10px;">Connecting to Cloud...</div>
+    </div>
+  </div>
+
 </main>
 
 <!-- ── TOAST ──────────────────────────────────────────────────── -->
@@ -492,6 +504,28 @@
 
 <!-- ── SCRIPT ─────────────────────────────────────────────────── -->
 <script>
+  // ── FIREBASE CONFIGURATION ─────────────────────────────────────────
+  const firebaseConfig = {
+    apiKey: "AIzaSyBLG7H979X4rYF9WrFwR1YHFD9kbyU1ct8",
+    authDomain: "sensor-532ac.firebaseapp.com",
+    databaseURL: "https://sensor-532ac-default-rtdb.firebaseio.com",
+    projectId: "sensor-532ac",
+    storageBucket: "sensor-532ac.firebasestorage.app",
+    messagingSenderId: "430259992183",
+    appId: "1:430259992183:web:076d2a63a348a738057872",
+    measurementId: "G-EB3D9EV280"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  function logToFirebase(status, method) {
+    db.ref("medicine_history").push({
+      status: status,
+      method: method,
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    }).catch(e => console.warn("Firebase permission error: ", e));
+  }
+
   const TOKEN = "9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU";
   const BLYNK = "https://blynk.cloud/external/api";
 
@@ -507,6 +541,37 @@
   const camIcon       = document.getElementById("cam-icon");
   const irLabel       = document.getElementById("ir-label");
   const notifBtn      = document.getElementById("notif-btn");
+  const historyList   = document.getElementById("history-list");
+
+  // ── Load Firebase History to UI ─────────────────────────
+  try {
+    db.ref("medicine_history").orderByChild("timestamp").limitToLast(15).on("value", snapshot => {
+      historyList.innerHTML = "";
+      if(!snapshot.exists()) {
+        historyList.innerHTML = '<div style="opacity:0.6; padding:10px;">No history yet. (Add your Firebase Keys to see data!)</div>';
+        return;
+      }
+      const data = snapshot.val();
+      const rows = [];
+      for(let key in data) rows.unshift(data[key]); // New items at top
+      
+      rows.forEach(r => {
+        const timeStr = new Date(r.timestamp).toLocaleString("en-IN", {hour:'numeric',minute:'2-digit', month:'short', day:'numeric'});
+        const color = r.status==="Taken" ? "var(--green)" : "var(--red)";
+        historyList.innerHTML += `
+          <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid rgba(0,0,0,0.1);">
+            <div>
+              <strong style="color:${color}">${r.status}</strong><br>
+              <span style="font-size:0.75rem;opacity:0.6;">Method: ${r.method || "System Event"}</span>
+            </div>
+            <div style="font-weight:700; font-size:0.85rem; text-align:right;">${timeStr}</div>
+          </div>
+        `;
+      });
+    }, err => {
+      historyList.innerHTML = '<div style="opacity:0.6; padding:10px; color:var(--red);">⚠️ Realtime DB disabled or keys invalid. Check your Firebase config!</div>';
+    });
+  } catch(e) {}
 
   // ── Live Clock ──────────────────────────────────────────
   function updateClock() {
@@ -621,6 +686,7 @@
             chart.data.datasets[0].data = [taken, missed];
             chart.update();
             nativeNotify("✅ Taken", "Medicine confirmed taken by camera");
+            logToFirebase("Taken", lastPush || "Camera/IR Verified");
           }
           if (d.includes("Missed")) {
             missed++;
@@ -630,6 +696,7 @@
             chart.data.datasets[0].data = [taken, missed];
             chart.update();
             nativeNotify("❌ Missed!", "Patient did not take medicine");
+            logToFirebase("Missed", "Timeout - User Ignored");
           }
           if (d.includes("Dispensed") || d.includes("Take Medicine")) {
             setCamState("active", "Medicine dispensed — camera watching…", "🎥");

@@ -63,7 +63,7 @@ void sendPushEvent(String msg) {
 // ── SERVO ────────────────────────────────────────────
 void dispenseMedicine() {
   myServo.write(90);
-  delay(1200);
+  delay(3000);
   myServo.write(0);
 }
 
@@ -219,6 +219,7 @@ void loop() {
   // ── BUTTON (FIXED & SAFE) ─────────────────────────
   bool currentButtonState = digitalRead(buttonPin);
 
+  // If the button is wired to GND, it reads LOW when pressed.
   if (lastButtonState == HIGH && currentButtonState == LOW &&
       !alertActive && !awaitingCamConfirm &&
       millis() - lastPress > 800) {
@@ -237,7 +238,7 @@ void loop() {
     alertActive = true;
     alertStart = millis();
 
-    sendPushEvent("Medicine dispensed manually (button)!");
+    sendPushEvent("Medicine dispensed manually!");
   }
 
   lastButtonState = currentButtonState;
@@ -289,16 +290,14 @@ void loop() {
     }
 
     if (digitalRead(ir1) == LOW && digitalRead(ir2) == LOW) {
+      // IR detects medicine removed from box.
+      // We only silence the alarm, BUT we keep awaitingCamConfirm = true!
+      // This forces the AI camera to officially verify it.
+      
       digitalWrite(buzzer, LOW);
-      Blynk.virtualWrite(V2, 0);
-      awaitingCamConfirm = false;
-
-      lcdShow("Medicine Taken", "IR Confirmed");
-      updateStatus("Medicine Taken");
-
-      delay(1500);
-      lcd.clear();
-      alertActive = false;
+      alertActive = false; // Stop the loud beeping
+      
+      lcdShow("Med Removed", "Show Camera!");
     }
   }
 
