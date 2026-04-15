@@ -545,12 +545,19 @@
 
   // ── Load Firebase History to UI ─────────────────────────
   try {
+    // Check real connection status
+    db.ref(".info/connected").on("value", snap => {
+      if (snap.val() === true) {
+        console.log("Firebase Connected");
+      }
+    });
+
     db.ref("medicine_history").orderByChild("timestamp").limitToLast(15).on("value", snapshot => {
-      historyList.innerHTML = "";
       if(!snapshot.exists()) {
-        historyList.innerHTML = '<div style="opacity:0.6; padding:10px;">No history yet. (Add your Firebase Keys to see data!)</div>';
+        historyList.innerHTML = '<div style="opacity:0.6; padding:10px;">No history yet. (Database is empty)</div>';
         return;
       }
+      historyList.innerHTML = "";
       const data = snapshot.val();
       const rows = [];
       for(let key in data) rows.unshift(data[key]); // New items at top
@@ -569,9 +576,20 @@
         `;
       });
     }, err => {
-      historyList.innerHTML = '<div style="opacity:0.6; padding:10px; color:var(--red);">⚠️ Realtime DB disabled or keys invalid. Check your Firebase config!</div>';
+      console.warn("DB Error", err);
+      historyList.innerHTML = '<div style="opacity:0.6; padding:10px; color:var(--red);">⚠️ Permission Denied: Did you set Realtime DB rules to .read: true?</div>';
     });
-  } catch(e) {}
+
+    // Timeout if stuck for 4 seconds
+    setTimeout(() => {
+      if (historyList.innerHTML.includes("Connecting to Cloud")) {
+        historyList.innerHTML = '<div style="opacity:0.8; padding:10px; color:var(--red); font-weight:600;">⚠️ Socket Hang: You likely haven\'t clicked "Create Database" in Firebase Realtime Database yet, or the database URL is incorrect.</div>';
+      }
+    }, 4000);
+
+  } catch(e) {
+    console.error(e);
+  }
 
   // ── Live Clock ──────────────────────────────────────────
   function updateClock() {

@@ -4,8 +4,14 @@
              • Web Push Notifications
    ============================================================ */
 
-const CACHE_NAME = "med-app-v12";
-const CACHED_URLS = ["./", "./index.html"];
+const CACHE_NAME = "med-app-v13";
+const CACHED_URLS = [
+  "./", 
+  "./index.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png"
+];
 
 // ── INSTALL: pre-cache shell ──────────────────────────────
 self.addEventListener("install", e => {
@@ -31,8 +37,8 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
 
-  // Pass Blynk API calls straight through (never cache)
-  if (url.hostname.includes("blynk.cloud")) {
+  // Pass API calls (Blynk & Firebase) straight through (never cache)
+  if (url.hostname.includes("blynk.cloud") || url.hostname.includes("firebaseio.com") || url.hostname.includes("googleapis.com")) {
     e.respondWith(fetch(e.request));
     return;
   }
