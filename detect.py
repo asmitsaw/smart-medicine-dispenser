@@ -173,7 +173,7 @@ def run_camera_detection():
             print("[CAM] *** MEDICINE TAKEN DETECTED ***")
 
         # OSD
-        label  = "TAKING MEDICINE" if detected else ("DETECTING..." if this_frame_detected else "WATCHING...")
+        label  = "TAKEN MEDICINE" if detected else ("DETECTING..." if this_frame_detected else "WATCHING...")
         color  = (0, 220, 0) if detected else (0, 200, 220)
         cv2.putText(frame_draw, label, (12, 45),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
