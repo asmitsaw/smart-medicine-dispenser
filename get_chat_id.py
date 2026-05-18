@@ -2,7 +2,7 @@ import requests
 import time
 import sys
 
-TOKEN = "8497843059:AAEWKBe166tHBlUWZC0XVNB3cDuODGSCB7A"
+TOKEN = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 print("Waiting for you to send a message to the bot...")
 for _ in range(30):
