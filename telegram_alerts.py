@@ -1,8 +1,8 @@
 import requests
 
 # We will fill these in once you provide your Token and Chat ID!
-TELEGRAM_BOT_TOKEN = "8690875925:AAFYcEI-LgaUP4k2E2eLsS6E7rDWq__IRhg"
-TELEGRAM_CHAT_ID = "7663808380"
+TELEGRAM_BOT_TOKEN = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+TELEGRAM_CHAT_ID = "XXXXXXXXXXXXXXXXXXXX"
 
 def send_telegram_message(message):
     """Sends a text message to the configured Telegram chat."""
