@@ -1,434 +1,100 @@
-# 💊 Smart Medicine Dispenser
+# 💊 Smart Medicine Dispenser (MedBox)
 
-> An IoT-powered automatic medicine dispenser with AI camera detection, IR sensor confirmation, real-time push notifications, and a Progressive Web App dashboard — built on ESP32 + Blynk + Python + MediaPipe.
+An innovative, IoT-enabled automated medicine dispenser system equipped with an AI-powered camera monitor, a responsive neo-brutalist web dashboard, real-time Telegram alerts, and an intelligent medical patient chatbot. It integrates hardware (ESP32) and modern software technologies to ensure precise and timely delivery of medicine to patients, verifying ingestion via computer vision.
 
----
+## ✨ Features
 
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Hardware Components](#hardware-components)
-- [Wiring Reference](#wiring-reference)
-- [Virtual Pin Map (Blynk)](#virtual-pin-map-blynk)
-- [File Structure](#file-structure)
-- [Setup Guide](#setup-guide)
-  - [1. Blynk Console Setup](#1-blynk-console-setup)
-  - [2. ESP32 Firmware](#2-esp32-firmware)
-  - [3. Python Detection Script](#3-python-detection-script)
-  - [4. Web Dashboard (PWA)](#4-web-dashboard-pwa)
-- [How It Works — Full Flow](#how-it-works--full-flow)
-- [Features](#features)
-- [Push Notifications](#push-notifications)
-- [Troubleshooting](#troubleshooting)
-- [Dependencies](#dependencies)
+- **Automated & Manual Dispensing**: Schedule medicines via the dashboard or manually trigger a dose instantly. 
+- **AI Camera Verification**: Uses **OpenCV** and **MediaPipe** to detect when the patient picks up the medicine and brings it to their mouth, visually confirming the medicine intake.
+- **Real-Time Push Alerts & Telegram Notifications**: Get instant push notifications and Telegram alerts with photo confirmation whenever medicine is successfully taken or if a dose is missed.
+- **PWA Web Dashboard**: A "neo-brutalist" style responsive web app displaying live device status, daily medicine intake statistics, a manual override control, and a full cloud-synced history log.
+- **Firebase Sync**: Medicine adherence history is backed up automatically via Firebase Realtime Database.
+- **Senor Medicine Assistant (AI Chatbot)**: A Telegram chatbot powered by the **Google Gemini 2.5 Flash** model, trained to act as a helpful and compassionate AI Medical Assistant to answer basic disease, medication, and usage questions safely.
 
 ---
 
-## Overview
+## 🏗️ System Architecture
 
-The Smart Medicine Dispenser automatically dispenses medicine at scheduled times and verifies whether the patient actually took it using:
+The project consists of three main operational environments communicating in sync:
 
-1. **IR Sensors** (primary — physical pickup detection)
-2. **AI Camera** (secondary — hand-to-mouth gesture via MediaPipe)
+1. **Hardware / IoT Node (ESP32 via Blynk IoT)**
+   - Manages physical servos to dispense medicine.
+   - Monitors physical IR Sensors at the dispensary shoot.
+   - Hosts schedules internally triggered via Blynk Virtual Pins.
+   
+2. **Web Dashboard (`index.html` + `sw.js` + `manifest.json`)**
+   - Built with HTML, CSS (Vanilla), JS, and Chart.js.
+   - Connects to **Blynk API** to send dispense signals and read camera/IR sensor status.
+   - Installs as a standalone PWA on mobile and desktop.
+   
+3. **Computer Vision & Alert System (`detect.py` + `telegram_alerts.py`)**
+   - Runs in the background (Windows/Linux/Mac).
+   - Polls Blynk for dispense events.
+   - Triggers the webcam on dispense, uses **MediaPipe** to calculate Euclidean distance between hands and mouth. Submits a photo snapshot to Telegram if successful (intake verified).
+   - Reports the physical success or missed status back to the dashboard immediately.
 
-Results are synced to a beautiful Neo-Brutal PWA dashboard in real time, with native browser push notifications for every event.
-
----
-
-## System Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        BLYNK CLOUD                           │
-│   V0/V4/V5 Timers  ·  V2 Trigger  ·  V3 Status  ·  V10 Push │
-└────────────┬───────────────────────────┬─────────────────────┘
-             │                           │
-     ┌───────▼────────┐         ┌────────▼──────────┐
-     │   ESP32 (C++)  │◄────────│  detect.py (PC)   │
-     │   semi.ino     │ V2,V9   │  MediaPipe + CV2  │
-     │                │────────►│                   │
-     └───────┬────────┘         └───────────────────┘
-             │
-     ┌───────▼────────────────────────────┐
-     │         HARDWARE                   │
-     │  Servo · LCD · Buzzer · IR1 · IR2  │
-     │  RTC DS1307 · LED indicators       │
-     └────────────────────────────────────┘
-             │
-     ┌───────▼──────────────┐
-     │   PWA Dashboard       │
-     │   index.html (Browser)│
-     │   Push Notifications  │
-     └───────────────────────┘
-```
+4. **AI Patient Chatbot (`patient_bot.py`)**
+   - A Telegram bot integrating with the **Google Gemini API**.
+   - Listens for patient queries and responds naturally with a supportive medical persona.
 
 ---
 
-## Hardware Components
+## 🛠️ Prerequisites & Installation
 
-| # | Component | Purpose |
-|---|-----------|---------|
-| 1 | **ESP32 Dev Module** | Main MCU — WiFi, logic, servo control |
-| 2 | **DS1307 RTC Module** | Real-time clock (backed by battery) |
-| 3 | **SG90 Servo Motor** | Rotates to dispense medicine |
-| 4 | **JHD162A LCD 16×2** | Display time and status messages |
-| 5 | **I2C Adapter (PCF8574)** | LCD I2C interface (4-wire connection) |
-| 6 | **IR Sensor × 2** | Detect hand/medicine pickup physically |
-| 7 | **Active Buzzer** | Audio alert during dose time |
-| 8 | **ESP32-CAM (optional)** | Camera module for AI detection |
-| 9 | **PC Webcam** | Used by `detect.py` for gesture detection |
+### 1. Requirements
+Ensure you have the following installed:
+- Python 3.8+
+- Modern Web Browser (Chrome/Edge/Safari)
 
----
-
-## Wiring Reference
-
-### I2C Bus (shared by RTC + LCD)
-
-| Signal | ESP32 GPIO |
-|--------|-----------|
-| SDA | GPIO 21 |
-| SCL | GPIO 22 |
-
-### Full Pin Map
-
-| Component | Pin | ESP32 GPIO |
-|-----------|-----|-----------|
-| Servo (SG90) | Signal | GPIO 13 |
-| Buzzer | + | GPIO 27 |
-| IR Sensor 1 | OUT | GPIO 34 |
-| IR Sensor 2 | OUT | GPIO 35 |
-| LCD/RTC SDA | SDA | GPIO 21 |
-| LCD/RTC SCL | SCL | GPIO 22 |
-| RTC VCC | 3.3 V | 3V3 |
-| LCD VCC | 5 V | VIN |
-| All GND | GND | GND |
-
-> ⚠️ **Critical:** All GND must share a common rail. Servo may need external 5 V if ESP resets during rotation.
-
----
-
-## Virtual Pin Map (Blynk)
-
-| Pin | Direction | Type | Description |
-|-----|-----------|------|-------------|
-| **V0** | Web → ESP32 | Integer (Time) | Morning dose time (seconds from midnight) |
-| **V4** | Web → ESP32 | Integer (Time) | Afternoon dose time |
-| **V5** | Web → ESP32 | Integer (Time) | Night dose time |
-| **V1** | Web → ESP32 | Integer | Manual dispense trigger (write 1) |
-| **V2** | ESP32 → Python | Integer | Dispensed flag (1=dispensed, 0=done) |
-| **V3** | ESP32 → Web | String | Human-readable status string |
-| **V9** | Python → ESP32 | Integer | Camera result (1=Taken, 0=Missed) |
-| **V10** | ESP32/Python → Web | String | Push notification message |
-
-> **Timer encoding:** Web sends `H × 3600 + M × 60` (seconds from midnight).  
-> Example: `08:30` → `30600` · `23:51` → `85860`
-
----
-
-## File Structure
-
-```
-sensor/
-├── semi/
-│   └── semi.ino          # ESP32 firmware (Arduino C++)
-├── detect.py             # Python AI detection script (runs on PC)
-├── index.html            # PWA dashboard (Neo-Brutal UI)
-├── sw.js                 # Service Worker (PWA + push handler)
-├── manifest.json         # PWA manifest
-├── reqirements.txt       # Python dependencies
-├── image.png             # PWA icon
-└── README.md             # This file
-```
-
----
-
-## Setup Guide
-
-### 1. Blynk Console Setup
-
-1. Go to [blynk.cloud](https://blynk.cloud) → **Templates**
-2. Open template `TMPL39IHNO8eS` (SMART MEDICINE DISPENSARY)
-3. Go to **Datastreams** and ensure these exist:
-
-| Datastream | Pin | Type | Min | Max |
-|------------|-----|------|-----|-----|
-| Morning Time | V0 | Integer | 0 | 86400 |
-| Afternoon Time | V4 | Integer | 0 | 86400 |
-| Night Time | V5 | Integer | 0 | 86400 |
-| Manual Dispense | V1 | Integer | 0 | 1 |
-| Cam Trigger | V2 | Integer | 0 | 1 |
-| Status | V3 | String | — | — |
-| Cam Result | V9 | Integer | 0 | 1 |
-| Push Message | V10 | String | — | — |
-
-> ⚠️ **Min/Max for V0/V4/V5 must be 0–86400** or the HTTP API will return `HTTP 400`.
-
----
-
-### 2. ESP32 Firmware
-
-#### Libraries Required (Arduino IDE)
-
-Install via **Sketch → Include Library → Manage Libraries**:
-
-| Library | Author |
-|---------|--------|
-| `BlynkSimpleEsp32` | Blynk |
-| `LiquidCrystal I2C` | Frank de Brabander |
-| `RTClib` | Adafruit |
-| `ESP32Servo` | Kevin Harrington |
-| `Time` (TimeLib) | Paul Stoffregen |
-
-#### Configure WiFi credentials in `semi.ino`
-
-```cpp
-char ssid[] = "YourWiFiName";
-char pass[] = "YourWiFiPassword";
-```
-
-#### Upload
-
-1. Open `semi/semi.ino` in Arduino IDE
-2. Select **Board**: `ESP32 Dev Module`
-3. Select correct **COM Port**
-4. Click **Upload**
-5. Open **Serial Monitor** at `115200` baud — you should see:
-   ```
-   [BLYNK] Connected - syncing V0/V4/V5...
-   RTC set HH:MM:SS
-   Status: System Ready
-   ```
-
----
-
-### 3. Python Detection Script
-
-#### Requirements
-
-- Python **3.11** (required — MediaPipe is not compatible with 3.12+)
-- A working webcam
-
-#### Install dependencies
-
+### 2. Python Dependencies
+Install the required packages using strictly:
 ```bash
-py -3.11 -m pip install opencv-python mediapipe==0.10.9 protobuf==3.20.3 requests
+pip install -r reqirements.txt
 ```
+*(Packages include `opencv-python`, `mediapipe`, `requests`, `google-generativeai`)*
 
-> If you get a `protobuf` conflict, pin it to `3.20.3` as above.
+### 3. API Keys Setup
+The system relies on various API keys for communication. Update the codebase with your keys:
+- **Blynk Token**: Add your token into `detect.py` and `index.html`.
+- **Firebase Realtime Database**: Paste your config JSON into `index.html`.
+- **Telegram Bot Token & Chat ID**: Put them in `telegram_alerts.py` and `patient_bot.py` where required.
+- **Gemini API Key**: Provide an AI Studio API key in `patient_bot.py`.
 
-#### Run
+---
 
+## 🚀 Usage Guide
+
+### Starting the Background Services
+A convenient startup script is provided for Windows users. Simply double-click on `start.bat` from your file explorer. Alternatively, you can trigger the systems manually:
+
+Start the **AI Camera Detect System**:
 ```bash
-# From the sensor/ directory
-py -3.11 detect.py
+python detect.py
 ```
 
-The script runs **headlessly** in the background, polling Blynk `V2` every 2 seconds. It only opens the camera window when the ESP32 signals that medicine has been dispensed.
-
-#### What detect.py does
-
-```
-Loop every 2s:
-  Poll V2
-  If V2 == 1:
-    Open webcam
-    Watch 18s for hand-to-mouth gesture (MediaPipe Hands + Face)
-    If detected → write V9=1, V3="Medicine Taken", V10="Camera confirmed"
-    If timeout   → write V9=0, V3="Missed Dose",   V10="MISSED!"
-    Reset V2=0
-  If V2 becomes 0 mid-detection (IR confirmed first):
-    Close camera early (background watcher thread)
-```
-
----
-
-### 4. Web Dashboard (PWA)
-
-Open `index.html` directly in a browser (Chrome recommended).
-
-#### First time setup
-
-1. Click **🔔 Notify** button in the header
-2. Allow browser notifications when prompted
-3. Notifications will now appear natively for every dose event
-
-#### Setting Timers
-
-1. In the **Schedule** section, pick a time using the time picker
-2. Click **Set Morning / Set Afternoon / Set Night**
-3. Toast shows `✅ Morning alarm set for 08:30`
-4. Serial Monitor confirms: `[TIMER] Morning → 08:30`
-
-#### Manual Dispense
-
-Click **⚡ Dispense Medicine** to immediately trigger one dose release.
-
----
-
-## How It Works — Full Flow
-
-```
-Scheduled dose time arrives (or Manual Dispense clicked)
-      │
-      ▼
-ESP32 → servo rotates 90° → medicine drops
-ESP32 → V2 = 1             (signals Python cam)
-ESP32 → V3 = "Take Medicine!"
-ESP32 → V10 = "Time to take your medicine!"
-ESP32 → buzzer starts beeping (400ms toggle)
-      │
-      ├──── PRIORITY 1: IR Sensors ─────────────────────────────
-      │     Both IR1 & IR2 LOW = hand in dispenser
-      │     → buzzer OFF, V2=0 (camera closes early)
-      │     → V3 = "Medicine Taken", V10 = "IR confirmed"
-      │     → alertActive = false  ✓
-      │
-      ├──── PRIORITY 2: Camera (detect.py) ────────────────────
-      │     Hand-to-mouth detected within 18s
-      │     → V9=1, V3="Medicine Taken", V10="Cam confirmed"
-      │     → ESP32 BLYNK_WRITE(V9) → alertActive = false  ✓
-      │
-      ├──── PRIORITY 3: Camera Timeout (20s) ──────────────────
-      │     detect.py never responded → re-reads IR snapshot
-      │     If IR LOW → "Medicine Taken (IR Fallback)"
-      │     If IR HIGH → "Missed Dose (Timeout)"
-      │
-      └──── PRIORITY 4: Overall Timeout (30s) ─────────────────
-            → V3 = "Missed Dose", V10 = "MISSED!"
-            → alertActive = false  ✓
-
-Web Dashboard (polling every 2–3s):
-  V3 → Status card + toast
-  V2 → Camera card animation (pulsing yellow while watching)
-  V10 → nativeNotify() browser popup
-```
-
----
-
-## Features
-
-| Feature | Implementation |
-|---------|---------------|
-| 3 daily dose timers | RTC-based, set remotely via PWA |
-| Servo dispense | SG90 on GPIO 13, 90° rotation |
-| NTP time sync | Syncs RTC to IST on every boot |
-| IR pickup detection | GPIO 34 & 35, priority-1 confirmation |
-| AI camera detection | MediaPipe Hands + Face, 18s window |
-| Camera early exit | Background thread watches V2; exits if IR confirms first |
-| Buzzer alert | Non-blocking 400ms toggle, stops on any confirmation |
-| LCD status | I2C 16×2, throttled to 1s refresh |
-| Live status on web | V3 polling every 2s |
-| Camera state card | V2 polling every 2.5s, animated pulsing |
-| Push notifications | Web Notifications API + V10 polling every 3s |
-| PWA / installable | `manifest.json` + `sw.js` service worker |
-| Dose stats chart | Chart.js doughnut, persisted in localStorage |
-| Manual dispense | V1 button in PWA |
-| Timer persistence | `BLYNK_CONNECTED()` + `syncVirtual` on reconnect |
-
----
-
-## Push Notifications
-
-The system has **two notification layers**:
-
-### 1. Browser (Web Notifications API)
-- Click **🔔 Notify** in the header → grant permission
-- Works on desktop Chrome/Edge/Firefox
-- Fires on: dose time, medicine taken, missed dose, camera active
-- Requires the web page to be open (or PWA installed)
-
-### 2. Blynk V10 Polling
-- ESP32 and `detect.py` write human-readable messages to V10
-- Dashboard polls V10 every 3s and calls `nativeNotify()`
-- Deduplicates (only notifies if message changed)
-
----
-
-## Troubleshooting
-
-### Serial Monitor shows nothing on timer set
-**Cause:** Blynk datastream Min/Max too narrow (e.g. max=23 for hours).  
-**Fix:** Set V0/V4/V5 Max = `86400` in Blynk Console → Datastreams.
-
-### `HTTP 400` when setting timer
-**Cause:** Value out of datastream range.  
-**Fix:** Same as above — update Min=0, Max=86400 for V0/V4/V5.
-
-### `[TIMER] Morning → 00:00` on boot
-**Cause:** Old firmware stored `10` (integer hour) in V0; new firmware reads it as 10 seconds = 00:00.  
-**Fix:** Simply click **Set Morning** once from the web to overwrite with correct value.
-
-### Camera not opening
-**Cause:** `detect.py` not running, or wrong Python version.  
-**Fix:** Run with `py -3.11 detect.py`. Check webcam index (default `0`).
-
-### Mediapipe ImportError / protobuf conflict
+Start the **Telegram AI Assistant**:
 ```bash
-py -3.11 -m pip install mediapipe==0.10.9 protobuf==3.20.3
+python patient_bot.py
 ```
 
-### RTC shows wrong time
-**Cause:** `if (!rtc.isrunning())` guard prevented update.  
-**Fix:** Already fixed — firmware now always NTP-syncs on boot after WiFi connects.
-
-### Servo jitters / ESP32 resets during dispense
-**Cause:** Servo drawing too much current from ESP32's 5V pin.  
-**Fix:** Power servo from external 5V supply; share GND with ESP32.
-
-### Buzzer never stops
-**Cause:** `alertActive` stuck true.  
-**Fix:** Upload latest firmware — timeout (30s) auto-resolves.
+### Navigating the Web Dashboard
+1. Open the project folder and double-click `index.html` (or host it locally).
+2. For an optimal experience on mobile, use your browser's **"Add to Home Screen"** function to install the site as a native PWA app.
+3. Configure the dosing schedule or press **"Dispense Now"** to test the system manually.
+4. When medicine is dispensed, look at the connected webcam to perform the 'pill to mouth' gesture. Wait for the success tone/alert!
 
 ---
 
-## Dependencies
+## 📋 File Layout
 
-### Arduino Libraries
-
-```
-BlynkSimpleEsp32
-LiquidCrystal I2C (Frank de Brabander)
-RTClib (Adafruit)
-ESP32Servo
-Time (TimeLib, Paul Stoffregen)
-WiFi (built-in ESP32)
-time.h (ESP32 IDF, built-in)
-```
-
-### Python (3.11)
-
-```
-opencv-python
-mediapipe==0.10.9
-protobuf==3.20.3
-requests
-```
-
-### Web / PWA
-
-```
-Chart.js (CDN)      — dose statistics doughnut chart
-Web Notifications API — native push alerts
-Service Worker API  — PWA, offline cache
-Blynk HTTP API      — all IoT communication
-Google Fonts        — Space Grotesk
-```
+* `index.html` — The main frontend web interface.
+* `detect.py` — The core logic integrating the Blynk API trigger and OpenCV/Mediapipe inference.
+* `patient_bot.py` — The Telegram bot wrapper connecting user chats to Google's Gemini LLM.
+* `telegram_alerts.py` — The helper utility handling photo and message dispatch through the Telegram Bot API.
+* `sw.js` / `manifest.json` — Progressive Web App metadata and caching setup.
+* `start.bat` — One-click launcher for Windows.
 
 ---
 
-## Project Info
-
-| Item | Value |
-|------|-------|
-| Platform | ESP32 Dev Module |
-| Blynk Template | `TMPL39IHNO8eS` — SMART MEDICINE DISPENSARY |
-| Auth Token | `9IZnV6T6HxYj6A4wMb6dM-aoUAo0J8eU` |
-| WiFi | Asmit's F55 |
-| Timezone | IST (UTC+5:30, offset 19800s) |
-| RTC | DS1307 at I2C address `0x27` |
-| LCD | 16×2 at I2C address `0x27` |
-
----
-
-*Built with ❤️ — Smart Medicine Dispenser v2.0*
+## ⚠️ Medical Disclaimer
+This software is provided for educational and assistive purposes only. It should **not** replace a professional healthcare provider. Please consult a real human doctor or a pharmacist for professional medical advice, diagnoses, or treatments.

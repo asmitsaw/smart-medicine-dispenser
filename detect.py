@@ -12,6 +12,7 @@ Flow:
 
 import sys, io, time, math, threading, requests, cv2
 import mediapipe as mp
+import telegram_alerts
 
 # ── Windows console UTF-8 fix ─────────────────────────────
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -171,6 +172,7 @@ def run_camera_detection():
             detected   = True
             last_detect= time.time()
             print("[CAM] *** MEDICINE TAKEN DETECTED ***")
+            cv2.imwrite("snapshot.jpg", frame_draw)
 
         # OSD
         label  = "TAKEN MEDICINE" if detected else ("DETECTING..." if this_frame_detected else "WATCHING...")
@@ -199,6 +201,7 @@ while True:
 
     if val == "1":
         print("[DETECT] Dispense signal received! Starting detection...")
+        telegram_alerts.send_telegram_message("🔔 *Medicine Timer!* It's time to take your medication. Dispensing now...")
 
         # --- Run camera in main thread (OpenCV needs main thread on Windows)
         taken = run_camera_detection()
@@ -212,12 +215,14 @@ while True:
                 blynk_set(V_CAM_RESULT, "1")
                 blynk_status("Medicine%20Taken")
                 blynk_push("Medicine%20taken%20-%20camera%20confirmed!")
+                telegram_alerts.send_telegram_photo("snapshot.jpg", "✅ *Medicine Taken!* Camera confirmation snapshot attached.")
                 last_taken_time = now_t
                 print("[DETECT] Result: TAKEN -> written V9=1")
         else:
             blynk_set(V_CAM_RESULT, "0")
             blynk_status("Missed%20Dose")
             blynk_push("MISSED!%20Medicine%20not%20taken%20-%20check%20patient")
+            telegram_alerts.send_telegram_message("🚨 *MISSED DOSE!* Patient did not take their medicine. Please check on them immediately.")
             print("[DETECT] Result: MISSED -> written V9=0")
 
         # Reset dispense flag so we don't re-trigger
